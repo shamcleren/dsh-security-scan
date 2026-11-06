@@ -148,7 +148,7 @@ export declare function evaluate(options: {
     }[];
     schemaVersion: number;
     createdAt: string;
-    pluginVersion: "0.17.1";
+    pluginVersion: "0.18.0";
     scanner: {
         name: string;
         version: string;

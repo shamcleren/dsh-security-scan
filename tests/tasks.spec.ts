@@ -271,14 +271,33 @@ it('deletes report files and their UI links while preserving run results and oth
   expect((await reopened.state()).runs[0]?.reportId).toBeUndefined()
   await expect(reopened.removeReport(f.run.reportId!)).rejects.toThrow('report-not-found')
 })
-it('protects reports configured as baselines and permits deletion after changing the baseline', async () => {
+it('compares each run with the task\'s previous report, falling back after deletion and never pinning one', async () => {
   const f = await completedScan()
-  const task = await f.service.save({ ...f.config, baseline: 'report', baselineId: f.run.reportId! }, f.task.id, f.task.revision)
-  await expect(f.service.removeReport(f.run.reportId!)).rejects.toThrow('report-in-use')
-  expect(await f.service.report(f.run.reportId!, 'json')).toContain(f.run.reportId)
-  await f.service.save(f.config, task.id, task.revision)
-  await f.service.removeReport(f.run.reportId!)
-  expect((await f.service.state()).reports).toEqual([])
+  expect(f.run.baselineReportId).toBeUndefined()
+  const first = JSON.parse(await f.service.report(f.run.reportId!, 'json'))
+  expect(first.baseline).toMatchObject({ id: 'first-scan', comparable: false, reason: expect.stringContaining('第一次完成扫描') })
+  const second = await f.service.start(f.task.id, f.task.revision)
+  expect(second.baselineReportId).toBe(f.run.reportId)
+  await vi.waitFor(async () => expect((await f.service.state()).runs.find(run => run.id === second.id)?.reportId).toBeTruthy())
+  const done = (await f.service.state()).runs.find(run => run.id === second.id)!
+  const compared = JSON.parse(await f.service.report(done.reportId!, 'json'))
+  // Inventory runs never prove novelty, so the new-finding count stays absent rather than reading as zero.
+  expect(compared.baseline).toMatchObject({ id: f.run.reportId, comparable: false })
+  expect(done.resultSummary?.added).toBeUndefined()
+  // The newest report becomes the next baseline; deleting it falls back to the older one instead of blocking deletion.
+  await f.service.removeReport(done.reportId!)
+  expect((await f.service.start(f.task.id, f.task.revision)).baselineReportId).toBe(f.run.reportId)
+})
+it('migrates tasks that pinned a saved report to the previous-report baseline', async () => {
+  const f = await completedScan(); await f.service.close()
+  const path = join(f.options.root, 'tasks.json'), store = JSON.parse(await readFile(path, 'utf8'))
+  Object.assign(store.tasks[0].config, { baseline: 'report', baselineId: f.run.reportId })
+  Object.assign(store.runs[0].config, { baseline: 'report', baselineId: f.run.reportId })
+  await writeFile(path, JSON.stringify(store))
+  const reopened = await SecurityTasks.open(f.options); services.push(reopened)
+  const state = await reopened.state()
+  expect(state.tasks[0]!.config).toMatchObject({ baseline: 'previous' }); expect(state.tasks[0]!.config).not.toHaveProperty('baselineId')
+  expect(state.runs[0]!).toMatchObject({ baselineReportId: f.run.reportId, config: { baseline: 'previous' } })
 })
 it('refuses active and queued records and protects a running snapshot baseline after task editing', async () => {
   const f = await completedScan(); await f.service.close()
@@ -287,10 +306,11 @@ it('refuses active and queued records and protects a running snapshot baseline a
     return audit(options)
   })
   const service = await SecurityTasks.open({ ...f.options, audit: scanner }); services.push(service)
-  const task = await service.save({ ...f.config, baseline: 'report', baselineId: f.run.reportId! }, f.task.id, f.task.revision)
+  const task = await service.save({ ...f.config, baseline: 'previous' }, f.task.id, f.task.revision)
   const run = await service.start(task.id, task.revision)
+  expect(run.baselineReportId).toBe(f.run.reportId)
   await vi.waitFor(() => expect(scanner).toHaveBeenCalledOnce())
-  await service.save(f.config, task.id, task.revision)
+  await service.save({ ...f.config, baseline: 'none' }, task.id, task.revision)
   const second = await service.save({ ...f.config, name: 'Queued' }), queued = await service.start(second.id, second.revision)
   await expect(service.removeRun(run.id)).rejects.toThrow('run-busy')
   await expect(service.removeRun(queued.id)).rejects.toThrow('run-busy')
@@ -531,6 +551,44 @@ it('closes the repair loop: the session queues one rescan and continues with wha
   await expect(f.service.repairRescan('security-repair-unknown')).rejects.toThrow('repair-unavailable')
 })
 
+it('lets the repair session exclude verified false positives so later rounds and comparisons skip them', async () => {
+  const prompt = vi.fn(async (..._args: unknown[]) => ({ accepted: true }))
+  const native = { sessionController: { create: vi.fn(async () => ({})), prompt, rename: vi.fn(async () => ({})) }, workspaceRegistry: { create: async () => ({ attachSession: vi.fn() }) } } as never
+  const candidate = (id: string, fingerprint: string, engine = 'semgrep') => ({ id, fingerprint, engine, rule: 'eval', file: 'app.py', line: 1, title: 'Candidate ' + id, cwe: 'CWE-95', severity: 'high' as const, status: 'needs-review' as const, change: 'unknown' as const, evidence: 'evidence', recommendation: 'review', verification: 'not verified' })
+  const rounds = [[candidate('real', 'fp-real'), candidate('noise', 'fp-noise'), candidate('ai', 'fp-ai', 'llm')], [candidate('real-2', 'fp-real'), candidate('noise-2', 'fp-noise')]]
+  let scans = 0
+  const f = await fixture({ agentContext: () => ({ native }), audit: async options => {
+    const result = await audit(options)
+    const { applySuppressions } = await import('../src/suppressions.js')
+    result.report = applySuppressions({ ...result.report, findings: rounds[Math.min(scans++, rounds.length - 1)]! }, options.suppressions?.items ?? [])
+    return result
+  } })
+  const task = await f.service.save(f.config)
+  await f.service.start(task.id, task.revision)
+  await vi.waitFor(async () => { expect((await f.service.state()).runs[0]?.reportId).toBeTruthy() })
+  const first = (await f.service.state()).runs[0]!.reportId!
+  const { sessionId } = await f.service.repair(first, ['real', 'noise'], 'local')
+  expect(JSON.stringify(prompt.mock.calls[0])).toContain('dsh_security_scan_exclude_findings')
+  // Another conversation, an AI-only finding and an unknown ID are rejected before anything is written.
+  await expect(f.service.exclusionTargets('another-session', '/elsewhere', ['noise'])).rejects.toThrow('report-not-found')
+  await expect(f.service.exclusionTargets(sessionId, undefined, ['ai'])).rejects.toThrow('finding-not-suppressible')
+  await expect(f.service.exclusionTargets(sessionId, undefined, ['missing'])).rejects.toThrow('unknown-finding')
+  expect((await f.service.exclusionTargets(sessionId, undefined, ['noise'])).map(item => item.finding.title)).toEqual(['Candidate noise'])
+  expect(await f.service.excludeFromSession(sessionId, undefined, ['noise'], '参数来自内部常量')).toEqual({ added: 1, existing: 0 })
+  expect((await f.service.suppressions())[0]).toMatchObject({ reason: '参数来自内部常量', reportId: first })
+  expect((await f.service.reportFindings(sessionId, undefined)).items.map(item => item.id)).toEqual(['real', 'ai'])
+  // The rescan hides the excluded finding; the next repair round only carries what is still real.
+  await f.service.repairRescan(sessionId)
+  await vi.waitFor(async () => { expect((await f.service.state()).runs[0]?.reportId).not.toBe(first) })
+  await vi.waitFor(async () => { expect((await f.service.state()).runs[0]?.reportId).toBeTruthy() })
+  const second = (await f.service.state()).runs[0]!.reportId!
+  const actions = await f.service.reportActions(second)
+  expect(actions.findings.find(item => item.id === 'noise-2')).toMatchObject({ status: 'dismissed', suppressed: true })
+  expect(await f.service.continueRepair(second)).toEqual({ sessionId, count: 1 })
+  expect((prompt.mock.calls.at(-1)![0] as { content: Array<{ text: string }> }).content[0]!.text).not.toContain('noise-2')
+  // Exclusion IDs from the latest round resolve against the newest report in the chain.
+  expect((await f.service.exclusionTargets(sessionId, undefined, ['real-2']))[0]!.reportId).toBe(second)
+})
 it('keeps a scan successful with partial coverage when the authorized runtime target is unreachable', async () => {
   const { createServer } = await import('node:http')
   const probe = createServer()

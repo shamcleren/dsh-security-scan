@@ -25,6 +25,10 @@ export interface AuditOptions {
     signal: AbortSignal;
     /** The user's saved exclusions. `identity` lets repair worktrees match the original repository. */
     suppressions?: SuppressionInput;
+    /** Repository identity to record when a repair worktree scans another path of the same repository. */
+    identity?: string;
+    /** The task compares with its previous report but has none yet; the report says so instead of "no baseline". */
+    firstScan?: boolean;
 }
 export interface SuppressionInput {
     items: readonly Suppression[];

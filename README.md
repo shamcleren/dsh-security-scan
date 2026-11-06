@@ -13,18 +13,18 @@
 - **只读运行时检查**：对你授权的服务地址发送最多 12 个同源 GET 请求，检查安全响应头、Cookie 属性、CORS、调试页面和 `.git` / `.env` 暴露。
 - **AI 复核（可选）**：用 DSH 里已配置的模型读取源码、追踪调用者，确认或排除候选问题，并补充越权、租户隔离等规则难以发现的风险；每条结论都引用实际读过的代码行。
 - **修复闭环**：在报告里勾选问题，一键交给 DSH 会话，默认在独立分支里修复并验证；修完自动复扫，对比哪些问题仍然存在，剩下的可以继续下一轮。
-- **误报排除**：标记为误报的问题在后续扫描中自动隐藏；相关代码改动后会重新出现。
-- **报告与集成**：离线 HTML、JSON 和 SARIF；可以只看相对目标分支新增的问题；`dsh-security` CLI、Git hooks 和 CI 复用同一套规则。
+- **误报排除**：在报告里标记，或让修复会话核实后经你审批排除；后续扫描自动隐藏，相关代码改动后会重新出现。
+- **报告与集成**：离线 HTML、JSON 和 SARIF；每次自动对比同一任务的上一份报告，也可以对比目标分支，只看新增的问题；`dsh-security` CLI、Git hooks 和 CI 复用同一套规则。
 
 ## 安装
 
 需要官方 DSH **0.2.1-rc.5**，其他版本尚未验证。
 
 ```sh
-dsh plugin --profile web add https://github.com/shamcleren/dsh-security-scan/releases/download/v0.17.1/shamcleren-dsh-security-scan-0.17.1.tgz
+dsh plugin --profile web add @shamcleren/dsh-security-scan@0.18.0
 ```
 
-也可以在 DSH 侧栏的「插件 → 添加插件」里粘贴这个地址。官方桌面版把 `web` 换成实际使用的 `desktop` profile。安装后重启 DSH，侧栏上方会出现「安全扫描」。首次启用时，插件会自动下载并校验 Semgrep、Gitleaks 和独立的 Python，放在 `~/.dsh/security-scan/toolchains/`，不改动系统环境。
+也可以在 DSH 侧栏的「插件 → 添加插件」里填写 `@shamcleren/dsh-security-scan@0.18.0`。命令里写明版本号，是因为 DSH 使用的 pnpm 默认不自动选用发布不到一天的版本；升级时把版本号换成[发布记录](https://github.com/shamcleren/dsh-security-scan/releases)里的新版本。npm 包与 Release 中的 `.tgz` 是同一份文件，也可以直接用 Release 地址安装。官方桌面版把 `web` 换成实际使用的 `desktop` profile。安装后重启 DSH，侧栏上方会出现「安全扫描」。首次启用时，插件会自动下载并校验 Semgrep、Gitleaks 和独立的 Python，放在 `~/.dsh/security-scan/toolchains/`，不改动系统环境。
 
 ## 第一次扫描
 

@@ -22,6 +22,10 @@ export interface AuditOptions {
   view?: 'all' | 'new'; failOn?: 'none' | 'high' | 'medium'; signal: AbortSignal
   /** The user's saved exclusions. `identity` lets repair worktrees match the original repository. */
   suppressions?: SuppressionInput
+  /** Repository identity to record when a repair worktree scans another path of the same repository. */
+  identity?: string
+  /** The task compares with its previous report but has none yet; the report says so instead of "no baseline". */
+  firstScan?: boolean
 }
 export interface SuppressionInput { items: readonly Suppression[]; identity?: string; unavailable?: boolean }
 /** An unreadable list must not block scanning; the report says that exclusions were not applied. */
@@ -63,9 +67,11 @@ export function compare(report: Report, baseline: Report, renames: Record<string
     if (position >= 0) { remaining.splice(position, 1); return { ...item, change: valid ? 'existing' as const : 'unknown' as const } }
     return { ...item, change: valid ? 'new' as const : 'unknown' as const }
   })
-  return { ...report, findings, baseline: { id: baseline.id, comparable: valid, reason: valid ? '使用相同规则和引擎比较基线。历史问题不重复计为新增；未检出问题不自动认定已修复。' : '基线不可完整比较：仓库、范围、规则/引擎配置不同，或扫描不完整。新增状态保持未知。',
+  const label = baseline.id.startsWith('git:') ? 'Git 基线 ' + baseline.id.slice(4, 16) : createdAtLabel(baseline.createdAt) + ' 的扫描报告'
+  return { ...report, findings, baseline: { id: baseline.id, comparable: valid, reason: valid ? '对比 ' + label + '：使用相同规则和引擎，历史问题不重复计为新增；未检出问题不自动认定已修复。' : '无法完整对比 ' + label + '：仓库、范围、规则/引擎配置不同，或扫描不完整。新增状态保持未知。',
     notObserved: valid ? remaining.filter(item => report.source.scope === 'full' || report.source.changed.includes(item.file)).map(item => ({ ...item, change: 'not-observed' as const })) : [] } }
 }
+const createdAtLabel = (value: string): string => value.slice(0, 16).replace('T', ' ') + ' UTC'
 export async function audit(options: AuditOptions): Promise<{ report: Report; json: string; html: string }> {
   if (options.baseline && options.base) throw new Error('Choose either --base for a Git baseline or --baseline for a saved report')
   await options.onProgress?.('preparing')
@@ -76,7 +82,7 @@ export async function audit(options: AuditOptions): Promise<{ report: Report; js
     await options.onProgress?.('scanning')
     const results = await analyze(source, source.current, options)
     let report: Report = { schemaVersion: 1, pluginVersion: PLUGIN_VERSION, id: randomUUID(), createdAt: new Date().toISOString(),
-      source: { identity: source.identity, label: source.source, revision: source.scope === 'staged' ? 'index' : options.url || options.ref ? 'commit' : 'working-tree', scope: source.scope, digest: source.current.digest, files: source.current.files, changed: source.changed, skipped: source.current.skipped,
+      source: { identity: options.identity ?? source.identity, label: source.source, revision: source.scope === 'staged' ? 'index' : options.url || options.ref ? 'commit' : 'working-tree', scope: source.scope, digest: source.current.digest, files: source.current.files, changed: source.changed, skipped: source.current.skipped,
         ...(source.commit ? { commit: source.commit } : {}), ...(source.baseCommit ? { baseCommit: source.baseCommit } : {}) },
       policy: { engine: options.engine ?? 'auto', rulesDigest, dependencies: options.dependencies ?? false, secrets: options.secrets ?? false, view: options.view ?? 'all', failOn: options.failOn ?? 'none' },
       ...results, reviews: [], notes: ['报告保存扫描依据、位置和限量脱敏代码片段；密钥检测命中的文件不导出原文。', 'LLM 复核尚未执行；使用 dsh-security-review 并保存复核结果后会生成新报告版本。', '文件名变化仅在内容完全相同时自动识别；重命名并修改的候选需人工确认是否历史问题。', '本地 Git 工作区遵循 .gitignore 等标准忽略规则；已跟踪文件仍纳入检查。', '未启用项目自带脚本、Git hooks、子模块或依赖安装。'] }
@@ -87,6 +93,8 @@ export async function audit(options: AuditOptions): Promise<{ report: Report; js
       const baseline: Report = { ...report, id: 'git:' + source.baseCommit, source: { ...report.source, digest: source.previous.digest, files: source.previous.files }, ...await analyze(source, source.previous, options) }
       report = compare(report, baseline, source.renames)
     } else if (source.scope === 'staged' && !source.commit) report = { ...report, findings: report.findings.map(item => ({ ...item, change: comparable(report) ? 'new' : 'unknown' })), notes: [...report.notes, '首次提交，无历史基线；暂存区发现视为新增候选。'] }
+    // The coverage section shows this reason in place of "no baseline"; nothing is compared.
+    else if (options.firstScan) report = { ...report, baseline: { id: 'first-scan', comparable: false, reason: '这是该任务第一次完成扫描，没有上一份报告可对比，新增状态为未比较；下次扫描会自动以本报告为基线。', notObserved: [] } }
     report.evidenceArchive = await captureScanEvidence(report, source.current.path)
     if (options.dynamicUrl) {
       await options.onProgress?.('dynamic')

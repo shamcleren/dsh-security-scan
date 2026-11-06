@@ -23,6 +23,10 @@ try {
   await page.goto(url)
   await page.getByRole('heading', { name: '示例服务', exact: true }).waitFor()
   await page.getByRole('button', { name: '编辑', exact: true }).click()
+  // The baseline is the task's previous report; there is no report picker.
+  assert.equal(await page.getByLabel('比较基线', { exact: true }).inputValue(), 'previous')
+  await page.getByText('下次运行将对比', { exact: false }).waitFor()
+  assert.equal(await page.getByLabel('选择历史报告', { exact: true }).count(), 0)
   await page.getByLabel('任务名称', { exact: true }).fill('未保存的配置')
   await page.getByRole('button', { name: '运行记录', exact: false }).click()
   await page.getByRole('alertdialog', { name: '还有未保存的修改' }).waitFor()
@@ -94,6 +98,10 @@ try {
   await page.getByRole('button', { name: '刷新交付状态', exact: true }).click()
   await page.getByRole('button', { name: '在会话中修复 (1)', exact: true }).click()
   await page.getByRole('button', { name: '打开修复会话', exact: true }).waitFor()
+  // After a repair starts, findings can still be marked as false positives; the repaired ones are tagged.
+  await page.getByText('修复会话核实为误报的问题', { exact: false }).waitFor()
+  await page.locator('.finding-picker summary', { hasText: '选择要标记为误报的问题' }).waitFor()
+  await page.locator('.finding-row', { hasText: '外部输入直接进入命令执行' }).getByText('修复中', { exact: true }).waitFor()
   assert.deepEqual(await page.evaluate(() => window.scanFixture.calls), [{ repair: ['one'], mode: 'pr', expectedRevision: 'b'.repeat(64) }, { session: 'repair-session' }])
   if (process.env.UI_SCREENSHOT) await page.screenshot({ path: process.env.UI_SCREENSHOT, fullPage: true })
   assert.equal(await page.getByRole('link', { name: '查看 PR 差异' }).getAttribute('href'), 'https://github.com/example/project/pull/1')

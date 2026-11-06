@@ -1,7 +1,9 @@
+import { findingItem } from './follow-up.js';
 import type { ScanSession } from './session.js';
 import type { Toolchains } from './toolchains.js';
 import { type AgentReviewOptions } from './agent.js';
 import { audit } from './workflow.js';
+import { type Finding } from './report.js';
 import { manageHook } from './hooks.js';
 import { type ReportActions, type Task, type TaskConfig, type Run, type ScanSettings, type UiState, type HookRequest, type ModelCatalog, type Suppression } from './ui-contract.js';
 export declare class TaskError extends Error {
@@ -50,7 +52,18 @@ export declare class SecurityTasks {
     models(): Promise<ModelCatalog>;
     state(): Promise<UiState>;
     setup(): void;
+    private validated;
     save(input: TaskConfig, id?: string, revision?: number): Promise<Task>;
+    /**
+     * Conversation scans reuse one task per source and scope, so repeated requests share run history
+     * and the previous-report baseline. Workbench tasks belong to the user and are never reused.
+     */
+    saveConversation(input: TaskConfig): Promise<Task>;
+    /**
+     * The task's newest readable report from a successful run, preferring complete coverage. Repair-branch
+     * rescans scan other code and are skipped. Undefined means this is the task's first comparable scan.
+     */
+    private previousReport;
     remove(id: string, revision: number): Promise<void>;
     removeRun(id: string): Promise<void>;
     removeReport(id: string): Promise<void>;
@@ -63,6 +76,29 @@ export declare class SecurityTasks {
     private latestRescan;
     /** The repair that owns a report: the run itself, or the nearest ancestor through rescans. */
     private repairOrigin;
+    /** Reports owned by one admitted repair session, oldest first: the repaired report and its rescans. */
+    private repairReports;
+    /**
+     * Reports a conversation may act on, newest first: its repair chain, scans it started or observed, or an
+     * explicitly named report of a local scan inside its workspace. Other conversations' reports stay out of reach.
+     */
+    private sessionReports;
+    /** Resolve finding IDs to the newest reachable report containing each, for preview and exclusion. */
+    exclusionTargets(sessionId: string, workspace: string | undefined, findingIds: string[], reportId?: string): Promise<Array<{
+        reportId: string;
+        finding: Finding;
+    }>>;
+    /** Actionable findings of a report for the conversation that owns it: not dismissed and not excluded by the user. */
+    reportFindings(sessionId: string, workspace: string | undefined, requested?: string): Promise<{
+        reportId: string;
+        total: number;
+        items: ReturnType<typeof findingItem>[];
+    }>;
+    /** Record findings a conversation verified as not worth fixing; the tool layer obtains the user's approval first. */
+    excludeFromSession(sessionId: string, workspace: string | undefined, findingIds: string[], reason: string, reportId?: string): Promise<{
+        added: number;
+        existing: number;
+    }>;
     /** Called from the repair session itself; rescans the newest report in that repair chain. */
     repairRescan(sessionId: string): Promise<Run>;
     /** Queue remaining and newly added findings from a rescan comparison into the original repair session. */

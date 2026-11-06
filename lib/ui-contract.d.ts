@@ -19,7 +19,7 @@ export declare const RepairWorkspaceSchema: z.ZodObject<{
     prUrl: z.ZodOptional<z.ZodString>;
 }, z.core.$strict>;
 export type RepairWorkspace = z.infer<typeof RepairWorkspaceSchema>;
-export declare const TaskConfigSchema: z.ZodObject<{
+export declare const TaskConfigSchema: z.ZodPreprocess<z.ZodObject<{
     name: z.ZodString;
     kind: z.ZodEnum<{
         local: "local";
@@ -34,11 +34,10 @@ export declare const TaskConfigSchema: z.ZodObject<{
     }>;
     baseline: z.ZodEnum<{
         git: "git";
+        previous: "previous";
         none: "none";
-        report: "report";
     }>;
     base: z.ZodDefault<z.ZodString>;
-    baselineId: z.ZodDefault<z.ZodUnion<readonly [z.ZodLiteral<"">, z.ZodString]>>;
     engine: z.ZodEnum<{
         auto: "auto";
         inventory: "inventory";
@@ -65,13 +64,14 @@ export declare const TaskConfigSchema: z.ZodObject<{
         maxMinutes: z.ZodOptional<z.ZodNumber>;
         maxTokens: z.ZodOptional<z.ZodNumber>;
     }, z.core.$strict>>;
-}, z.core.$strict>;
+}, z.core.$strict>>;
 export type TaskConfig = z.infer<typeof TaskConfigSchema>;
+/** Conversation scans reuse their own task per target; workbench tasks are never rewritten by a conversation. */
 export declare const TaskSchema: z.ZodObject<{
     id: z.ZodString;
     revision: z.ZodNumber;
     updatedAt: z.ZodString;
-    config: z.ZodObject<{
+    config: z.ZodPreprocess<z.ZodObject<{
         name: z.ZodString;
         kind: z.ZodEnum<{
             local: "local";
@@ -86,11 +86,10 @@ export declare const TaskSchema: z.ZodObject<{
         }>;
         baseline: z.ZodEnum<{
             git: "git";
+            previous: "previous";
             none: "none";
-            report: "report";
         }>;
         base: z.ZodDefault<z.ZodString>;
-        baselineId: z.ZodDefault<z.ZodUnion<readonly [z.ZodLiteral<"">, z.ZodString]>>;
         engine: z.ZodEnum<{
             auto: "auto";
             inventory: "inventory";
@@ -117,13 +116,17 @@ export declare const TaskSchema: z.ZodObject<{
             maxMinutes: z.ZodOptional<z.ZodNumber>;
             maxTokens: z.ZodOptional<z.ZodNumber>;
         }, z.core.$strict>>;
-    }, z.core.$strict>;
+    }, z.core.$strict>>;
+    origin: z.ZodOptional<z.ZodEnum<{
+        workbench: "workbench";
+        conversation: "conversation";
+    }>>;
 }, z.core.$strict>;
 export type Task = z.infer<typeof TaskSchema>;
-export declare const RunSchema: z.ZodObject<{
+export declare const RunSchema: z.ZodPreprocess<z.ZodObject<{
     id: z.ZodString;
     taskId: z.ZodString;
-    config: z.ZodObject<{
+    config: z.ZodPreprocess<z.ZodObject<{
         name: z.ZodString;
         kind: z.ZodEnum<{
             local: "local";
@@ -138,11 +141,10 @@ export declare const RunSchema: z.ZodObject<{
         }>;
         baseline: z.ZodEnum<{
             git: "git";
+            previous: "previous";
             none: "none";
-            report: "report";
         }>;
         base: z.ZodDefault<z.ZodString>;
-        baselineId: z.ZodDefault<z.ZodUnion<readonly [z.ZodLiteral<"">, z.ZodString]>>;
         engine: z.ZodEnum<{
             auto: "auto";
             inventory: "inventory";
@@ -169,7 +171,7 @@ export declare const RunSchema: z.ZodObject<{
             maxMinutes: z.ZodOptional<z.ZodNumber>;
             maxTokens: z.ZodOptional<z.ZodNumber>;
         }, z.core.$strict>>;
-    }, z.core.$strict>;
+    }, z.core.$strict>>;
     status: z.ZodEnum<{
         partial: "partial";
         failed: "failed";
@@ -192,8 +194,8 @@ export declare const RunSchema: z.ZodObject<{
     }>;
     trigger: z.ZodEnum<{
         edit: "edit";
-        manual: "manual";
         conversation: "conversation";
+        manual: "manual";
         repair: "repair";
     }>;
     createdAt: z.ZodString;
@@ -204,6 +206,7 @@ export declare const RunSchema: z.ZodObject<{
     error: z.ZodOptional<z.ZodString>;
     previousReportId: z.ZodOptional<z.ZodString>;
     previousReportRoot: z.ZodOptional<z.ZodString>;
+    baselineReportId: z.ZodOptional<z.ZodString>;
     repairSource: z.ZodOptional<z.ZodObject<{
         repository: z.ZodString;
         repositoryUrl: z.ZodString;
@@ -250,6 +253,7 @@ export declare const RunSchema: z.ZodObject<{
         confirmed: z.ZodNumber;
         pending: z.ZodNumber;
         dismissed: z.ZodNumber;
+        added: z.ZodOptional<z.ZodNumber>;
     }, z.core.$strict>>;
     agent: z.ZodOptional<z.ZodObject<{
         status: z.ZodEnum<{
@@ -308,7 +312,7 @@ export declare const RunSchema: z.ZodObject<{
             count: z.ZodDefault<z.ZodNumber>;
         }, z.core.$strict>>;
     }, z.core.$strict>>;
-}, z.core.$strict>;
+}, z.core.$strict>>;
 export type Run = z.infer<typeof RunSchema>;
 export declare const SettingsSchema: z.ZodObject<{
     semgrepPath: z.ZodString;
@@ -378,7 +382,7 @@ export declare const UiStateSchema: z.ZodObject<{
         id: z.ZodString;
         revision: z.ZodNumber;
         updatedAt: z.ZodString;
-        config: z.ZodObject<{
+        config: z.ZodPreprocess<z.ZodObject<{
             name: z.ZodString;
             kind: z.ZodEnum<{
                 local: "local";
@@ -393,11 +397,10 @@ export declare const UiStateSchema: z.ZodObject<{
             }>;
             baseline: z.ZodEnum<{
                 git: "git";
+                previous: "previous";
                 none: "none";
-                report: "report";
             }>;
             base: z.ZodDefault<z.ZodString>;
-            baselineId: z.ZodDefault<z.ZodUnion<readonly [z.ZodLiteral<"">, z.ZodString]>>;
             engine: z.ZodEnum<{
                 auto: "auto";
                 inventory: "inventory";
@@ -424,12 +427,16 @@ export declare const UiStateSchema: z.ZodObject<{
                 maxMinutes: z.ZodOptional<z.ZodNumber>;
                 maxTokens: z.ZodOptional<z.ZodNumber>;
             }, z.core.$strict>>;
-        }, z.core.$strict>;
+        }, z.core.$strict>>;
+        origin: z.ZodOptional<z.ZodEnum<{
+            workbench: "workbench";
+            conversation: "conversation";
+        }>>;
     }, z.core.$strict>>;
-    runs: z.ZodArray<z.ZodObject<{
+    runs: z.ZodArray<z.ZodPreprocess<z.ZodObject<{
         id: z.ZodString;
         taskId: z.ZodString;
-        config: z.ZodObject<{
+        config: z.ZodPreprocess<z.ZodObject<{
             name: z.ZodString;
             kind: z.ZodEnum<{
                 local: "local";
@@ -444,11 +451,10 @@ export declare const UiStateSchema: z.ZodObject<{
             }>;
             baseline: z.ZodEnum<{
                 git: "git";
+                previous: "previous";
                 none: "none";
-                report: "report";
             }>;
             base: z.ZodDefault<z.ZodString>;
-            baselineId: z.ZodDefault<z.ZodUnion<readonly [z.ZodLiteral<"">, z.ZodString]>>;
             engine: z.ZodEnum<{
                 auto: "auto";
                 inventory: "inventory";
@@ -475,7 +481,7 @@ export declare const UiStateSchema: z.ZodObject<{
                 maxMinutes: z.ZodOptional<z.ZodNumber>;
                 maxTokens: z.ZodOptional<z.ZodNumber>;
             }, z.core.$strict>>;
-        }, z.core.$strict>;
+        }, z.core.$strict>>;
         status: z.ZodEnum<{
             partial: "partial";
             failed: "failed";
@@ -498,8 +504,8 @@ export declare const UiStateSchema: z.ZodObject<{
         }>;
         trigger: z.ZodEnum<{
             edit: "edit";
-            manual: "manual";
             conversation: "conversation";
+            manual: "manual";
             repair: "repair";
         }>;
         createdAt: z.ZodString;
@@ -510,6 +516,7 @@ export declare const UiStateSchema: z.ZodObject<{
         error: z.ZodOptional<z.ZodString>;
         previousReportId: z.ZodOptional<z.ZodString>;
         previousReportRoot: z.ZodOptional<z.ZodString>;
+        baselineReportId: z.ZodOptional<z.ZodString>;
         repairSource: z.ZodOptional<z.ZodObject<{
             repository: z.ZodString;
             repositoryUrl: z.ZodString;
@@ -556,6 +563,7 @@ export declare const UiStateSchema: z.ZodObject<{
             confirmed: z.ZodNumber;
             pending: z.ZodNumber;
             dismissed: z.ZodNumber;
+            added: z.ZodOptional<z.ZodNumber>;
         }, z.core.$strict>>;
         agent: z.ZodOptional<z.ZodObject<{
             status: z.ZodEnum<{
@@ -614,7 +622,7 @@ export declare const UiStateSchema: z.ZodObject<{
                 count: z.ZodDefault<z.ZodNumber>;
             }, z.core.$strict>>;
         }, z.core.$strict>>;
-    }, z.core.$strict>>;
+    }, z.core.$strict>>>;
     reports: z.ZodArray<z.ZodObject<{
         id: z.ZodString;
         createdAt: z.ZodString;
@@ -757,10 +765,10 @@ export declare const ReportActionsSchema: z.ZodObject<{
         suppressed: z.ZodDefault<z.ZodBoolean>;
         suppressible: z.ZodDefault<z.ZodBoolean>;
     }, z.core.$strip>>;
-    run: z.ZodOptional<z.ZodObject<{
+    run: z.ZodOptional<z.ZodPreprocess<z.ZodObject<{
         id: z.ZodString;
         taskId: z.ZodString;
-        config: z.ZodObject<{
+        config: z.ZodPreprocess<z.ZodObject<{
             name: z.ZodString;
             kind: z.ZodEnum<{
                 local: "local";
@@ -775,11 +783,10 @@ export declare const ReportActionsSchema: z.ZodObject<{
             }>;
             baseline: z.ZodEnum<{
                 git: "git";
+                previous: "previous";
                 none: "none";
-                report: "report";
             }>;
             base: z.ZodDefault<z.ZodString>;
-            baselineId: z.ZodDefault<z.ZodUnion<readonly [z.ZodLiteral<"">, z.ZodString]>>;
             engine: z.ZodEnum<{
                 auto: "auto";
                 inventory: "inventory";
@@ -806,7 +813,7 @@ export declare const ReportActionsSchema: z.ZodObject<{
                 maxMinutes: z.ZodOptional<z.ZodNumber>;
                 maxTokens: z.ZodOptional<z.ZodNumber>;
             }, z.core.$strict>>;
-        }, z.core.$strict>;
+        }, z.core.$strict>>;
         status: z.ZodEnum<{
             partial: "partial";
             failed: "failed";
@@ -829,8 +836,8 @@ export declare const ReportActionsSchema: z.ZodObject<{
         }>;
         trigger: z.ZodEnum<{
             edit: "edit";
-            manual: "manual";
             conversation: "conversation";
+            manual: "manual";
             repair: "repair";
         }>;
         createdAt: z.ZodString;
@@ -841,6 +848,7 @@ export declare const ReportActionsSchema: z.ZodObject<{
         error: z.ZodOptional<z.ZodString>;
         previousReportId: z.ZodOptional<z.ZodString>;
         previousReportRoot: z.ZodOptional<z.ZodString>;
+        baselineReportId: z.ZodOptional<z.ZodString>;
         repairSource: z.ZodOptional<z.ZodObject<{
             repository: z.ZodString;
             repositoryUrl: z.ZodString;
@@ -887,6 +895,7 @@ export declare const ReportActionsSchema: z.ZodObject<{
             confirmed: z.ZodNumber;
             pending: z.ZodNumber;
             dismissed: z.ZodNumber;
+            added: z.ZodOptional<z.ZodNumber>;
         }, z.core.$strict>>;
         agent: z.ZodOptional<z.ZodObject<{
             status: z.ZodEnum<{
@@ -945,7 +954,7 @@ export declare const ReportActionsSchema: z.ZodObject<{
                 count: z.ZodDefault<z.ZodNumber>;
             }, z.core.$strict>>;
         }, z.core.$strict>>;
-    }, z.core.$strict>>;
+    }, z.core.$strict>>>;
     repairable: z.ZodBoolean;
     repairMode: z.ZodDefault<z.ZodEnum<{
         pr: "pr";
@@ -989,8 +998,8 @@ export declare const ReportActionsSchema: z.ZodObject<{
             suppressible: z.ZodDefault<z.ZodBoolean>;
             change: z.ZodEnum<{
                 notObserved: "notObserved";
-                remaining: "remaining";
                 added: "added";
+                remaining: "remaining";
                 unverified: "unverified";
             }>;
         }, z.core.$strip>>;

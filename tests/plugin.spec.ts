@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import * as SecurityScan from '../src/index.js'
-import { SecurityTasks } from '../src/tasks.js'
+import { SecurityTasks, TaskError } from '../src/tasks.js'
 import { newTask } from '../src/ui-contract.js'
 
 class MemorySettings extends Service {
@@ -74,9 +74,37 @@ it('registers and retracts its real DSH tool, skill and settings with the plugin
     const listed = await fiber.ctx.tools.get('dsh_security_scan_reports')!.execute({}, context) as { result: string }
     expect(JSON.parse(listed.result)).toHaveLength(2)
     await fiber.dispose()
-    for (const name of ['dsh_security_scan_start', 'dsh_security_scan_repair_rescan', 'dsh_security_scan_status', 'dsh_security_scan_rules', 'dsh_security_scan_audit', 'dsh_security_scan_read_evidence', 'dsh_security_scan_review_report', 'dsh_security_scan_reports']) expect(tools.ctx.tools.get(name)).toBeUndefined()
+    for (const name of ['dsh_security_scan_start', 'dsh_security_scan_findings', 'dsh_security_scan_exclude_findings', 'dsh_security_scan_repair_rescan', 'dsh_security_scan_status', 'dsh_security_scan_rules', 'dsh_security_scan_audit', 'dsh_security_scan_read_evidence', 'dsh_security_scan_review_report', 'dsh_security_scan_reports']) expect(tools.ctx.tools.get(name)).toBeUndefined()
     expect(await skills.ctx.skills.list()).toEqual([])
   } finally { await ctx.fiber.dispose(); await rm(workspace, { recursive: true, force: true }) }
+})
+
+it('asks the user through the DSH approval pipeline before a conversation excludes findings', async () => {
+  const ctx = new Context(), home = await mkdtemp(join(tmpdir(), 'security-exclude-')), previousHome = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  ctx.provide('systemPrompt', { tools: () => undefined } as never)
+  ctx.provide('webServer', { host: '127.0.0.1', register: vi.fn(() => () => {}) } as never)
+  ctx.provide('connection', { admit: () => ({ peer: {} }) } as never)
+  const targets = vi.spyOn(SecurityTasks.prototype, 'exclusionTargets')
+  try {
+    const settings = await ctx.plugin(MemorySettings), skills = await settings.ctx.plugin(SkillRegistry), tools = await skills.ctx.plugin(ToolRuntime)
+    const fiber = await tools.ctx.plugin(SecurityScan, { semgrepPath: '/nonexistent/semgrep', gitleaksPath: '/nonexistent/gitleaks', reportDirectory: join(home, 'reports') })
+    expect(fiber.ctx.tools.get('dsh_security_scan_exclude_findings')?.description).toContain('approval prompt')
+    const agent = { session: { id: 'repair-session', header: { cwd: home } } }
+    const decide = (args: unknown) => fiber.ctx.waterfall('tools/pre-execute', { name: 'dsh_security_scan_exclude_findings', arguments: args, agent } as never, () => Promise.resolve({ kind: 'allow' } as const))
+    await vi.waitFor(() => expect(fiber.ctx.tools.get('dsh_security_scan_findings')).toBeDefined())
+    expect(await decide({ finding_ids: ['f1'] })).toMatchObject({ kind: 'deny' })
+    expect(targets).not.toHaveBeenCalled()
+    targets.mockRejectedValueOnce(new TaskError('report-not-found'))
+    expect(await decide({ finding_ids: ['f1'], reason: 'constant' })).toMatchObject({ kind: 'deny', reason: expect.stringContaining('report-not-found') })
+    targets.mockResolvedValueOnce([{ reportId: crypto.randomUUID(), finding: { title: 'eval on config', file: 'app.py', line: 3 } as never }])
+    const decision = await decide({ finding_ids: ['f1'], reason: '参数来自内部常量' })
+    expect(decision).toMatchObject({ kind: 'ask', displayReason: { zh: expect.stringContaining('eval on config（app.py:3）') } })
+    expect((decision as unknown as { displayReason: { zh: string } }).displayReason.zh).toContain('参数来自内部常量')
+    expect(targets).toHaveBeenLastCalledWith('repair-session', home, ['f1'], undefined)
+    // Other tools keep their own decisions.
+    expect(await fiber.ctx.waterfall('tools/pre-execute', { name: 'dsh_security_scan_status', arguments: {}, agent } as never, () => Promise.resolve({ kind: 'allow' } as const))).toEqual({ kind: 'allow' })
+  } finally { targets.mockRestore(); await ctx.fiber.dispose(); if (previousHome === undefined) delete process.env.DSH_HOME; else process.env.DSH_HOME = previousHome; await rm(home, { recursive: true, force: true }) }
 })
 
 it('the installed release composes through the official DSH profile loader', { skip: !process.env.SECURITY_TEST_INSTALLATION }, () => {
@@ -126,11 +154,14 @@ it('accesses optional model services only through declared injection scopes in t
     })
     try {
       await tools.ctx.tools.get('dsh_security_scan_start')!.execute({ name: 'Default scan' }, exec)
-      const current = await call('state', {}) as { value: { tasks: Array<{ config: ReturnType<typeof newTask> }> } }
-      const defaults = current.value.tasks.find(task => task.config.name === 'Default scan')!.config
-      expect(defaults).toMatchObject({ dependencies: true, secrets: true, agent: { enabled: true }, syncSession: true })
-      expect(newTask()).toMatchObject({ dependencies: defaults.dependencies, secrets: defaults.secrets, agent: defaults.agent })
-      expect(start).toHaveBeenCalledWith(expect.any(String), 1, 'conversation', 'conversation-fixture')
+      const current = await call('state', {}) as { value: { tasks: Array<{ id: string; origin?: string; config: ReturnType<typeof newTask> }> } }
+      // The same target reuses the conversation task, so both scans share history and the previous-report baseline.
+      expect(current.value.tasks).toHaveLength(1)
+      const reused = current.value.tasks[0]!, defaults = reused.config
+      expect(reused).toMatchObject({ id: started.taskId, origin: 'conversation' })
+      expect(defaults).toMatchObject({ name: 'Default scan', dependencies: true, secrets: true, agent: { enabled: true }, syncSession: true, baseline: 'previous' })
+      expect(newTask()).toMatchObject({ dependencies: defaults.dependencies, secrets: defaults.secrets, agent: defaults.agent, baseline: defaults.baseline })
+      expect(start).toHaveBeenCalledWith(started.taskId, 2, 'conversation', 'conversation-fixture')
     } finally { start.mockRestore() }
 
   } finally {

@@ -19,7 +19,7 @@ import { z } from 'zod'
 import { runAgentReview, type AgentReviewOptions } from './agent.js'
 import { audit, loadSuppressions, type AuditOptions } from './workflow.js'
 import { addSuppressions, readSuppressions, removeSuppression, suppressionFor, SuppressionError } from './suppressions.js'
-import { stageReportDeletion, exitCode, listReports, readReport, renderReport, reportFile, reviewReport, writeReport } from './report.js'
+import { stageReportDeletion, exitCode, listReports, readReport, renderReport, reportFile, reviewReport, writeReport, type Finding } from './report.js'
 import { manageHook, AuditQueue } from './hooks.js'
 import { validateRepositoryUrl, inside } from './repository.js'
 import { RepairRequestSchema, type ReportActions, HookRequestSchema, RunSchema, SettingsSchema, TaskConfigSchema, TaskSchema, type Task, type TaskConfig, type Run, type ScanSettings, type UiState, type HookRequest, type ModelCatalog, type Suppression } from './ui-contract.js'
@@ -119,8 +119,7 @@ export class SecurityTasks {
     return structuredClone({ tasks: this.data.tasks, runs: [...this.data.runs].reverse(), reports, settings: this.options.settings(), settingsWritable: this.options.writable(), agentDefault: selection ? { provider: selection.provider, model: selection.model } : null, warnings, ...(this.options.toolchains ? { toolchains: this.options.toolchains.state() } : {}) })
   }
   setup(): void { this.assertOpen(); void this.options.toolchains?.setup().catch(error => this.options.log(error)) }
-  async save(input: TaskConfig, id?: string, revision?: number): Promise<Task> {
-    this.assertOpen()
+  private async validated(input: TaskConfig): Promise<TaskConfig> {
     const config = TaskConfigSchema.parse(input)
     if (config.kind === 'remote') config.target = validateRepositoryUrl(config.target)
     else {
@@ -129,12 +128,48 @@ export class SecurityTasks {
       if (!(await lstat(target)).isDirectory() || target === '/' || target === homedir()) throw new TaskError('code-directory-required')
       config.target = target
     }
+    return config
+  }
+  async save(input: TaskConfig, id?: string, revision?: number): Promise<Task> {
+    this.assertOpen()
+    const config = await this.validated(input)
     return this.mutate(() => {
       const previous = id ? this.task(id, revision ?? 0) : undefined
       if (!previous && this.data.tasks.length >= 100) throw new TaskError('task-limit')
+      // A workbench edit makes a conversation-created task the user's own; later conversation scans no longer overwrite it.
       const task: Task = { id: previous?.id ?? randomUUID(), revision: (previous?.revision ?? 0) + 1, updatedAt: new Date().toISOString(), config }
       this.data.tasks = [...this.data.tasks.filter(value => value.id !== task.id), task]; return task
     })
+  }
+  /**
+   * Conversation scans reuse one task per source and scope, so repeated requests share run history
+   * and the previous-report baseline. Workbench tasks belong to the user and are never reused.
+   */
+  async saveConversation(input: TaskConfig): Promise<Task> {
+    this.assertOpen()
+    const config = await this.validated(input)
+    const key = (value: TaskConfig) => JSON.stringify([value.kind, value.target, value.ref, value.scope, value.base])
+    return this.mutate(() => {
+      const previous = this.data.tasks.find(task => task.origin === 'conversation' && key(task.config) === key(config))
+      if (!previous && this.data.tasks.length >= 100) throw new TaskError('task-limit')
+      const task: Task = { id: previous?.id ?? randomUUID(), revision: (previous?.revision ?? 0) + 1, updatedAt: new Date().toISOString(), origin: 'conversation', config }
+      this.data.tasks = [...this.data.tasks.filter(value => value.id !== task.id), task]; return task
+    })
+  }
+  /**
+   * The task's newest readable report from a successful run, preferring complete coverage. Repair-branch
+   * rescans scan other code and are skipped. Undefined means this is the task's first comparable scan.
+   */
+  private async previousReport(taskId: string): Promise<string | undefined> {
+    const candidates = this.data.runs.filter(run => run.taskId === taskId && run.status === 'succeeded' && run.reportId && !run.repairSource).reverse().slice(0, 10)
+    let fallback: string | undefined
+    for (const run of candidates) {
+      try { await readReport(this.reportLocation(run.reportId!)) }
+      catch { continue /* A deleted or unreadable report is skipped; an older one may still serve. */ }
+      if (run.coverage !== 'partial') return run.reportId
+      fallback ??= run.reportId
+    }
+    return fallback
   }
   async remove(id: string, revision: number): Promise<void> {
     this.assertOpen()
@@ -160,8 +195,8 @@ export class SecurityTasks {
     // Serialize baseline checks, filesystem staging and store updates against task starts/settings.
     const operation = this.tail.then(async () => {
       this.assertOpen()
-      if (this.repairs.has(id) || this.publishingReports.has(id) || this.data.tasks.some(task => task.config.baseline === 'report' && task.config.baselineId === id)
-        || this.data.runs.some(run => (active(run) || run.id === this.runningId) && (run.previousReportId === id || run.config.baselineId === id || run.reportId === id || run.rulesReportId === id))) throw new TaskError('report-in-use')
+      if (this.repairs.has(id) || this.publishingReports.has(id)
+        || this.data.runs.some(run => (active(run) || run.id === this.runningId) && (run.previousReportId === id || run.baselineReportId === id || run.reportId === id || run.rulesReportId === id))) throw new TaskError('report-in-use')
       let staged: Awaited<ReturnType<typeof stageReportDeletion>>
       try { staged = await stageReportDeletion(this.reportLocation(id), id) }
       catch (error) { throw new TaskError((error as NodeJS.ErrnoException).code === 'ENOENT' ? 'report-not-found' : 'unsafe-report-delete') }
@@ -181,11 +216,13 @@ export class SecurityTasks {
   }
   async start(id: string, revision: number, trigger: Run['trigger'] = 'manual', sessionId?: string): Promise<Run> {
     this.assertOpen()
-    const run = await this.mutate(() => {
+    const run = await this.mutate(async () => {
       const task = this.task(id, revision)
       if (this.data.runs.some(run => active(run) && (run.taskId === id || (sessionId && run.originSessionId === sessionId)))) throw new TaskError('task-busy')
       if (this.data.runs.filter(active).length >= 10) throw new TaskError('queue-full')
-      const run: Run = { id: randomUUID(), taskId: id, config: structuredClone(task.config), status: 'queued', phase: 'queued', trigger, ...(sessionId ? { originSessionId: sessionId, sessionId } : {}), createdAt: new Date().toISOString() }
+      // Resolved once at queue time, so the run compares with a fixed report even if newer runs finish first.
+      const baselineReportId = task.config.baseline === 'previous' ? await this.previousReport(id) : undefined
+      const run: Run = { id: randomUUID(), taskId: id, config: structuredClone(task.config), status: 'queued', phase: 'queued', trigger, ...(sessionId ? { originSessionId: sessionId, sessionId } : {}), ...(baselineReportId ? { baselineReportId } : {}), createdAt: new Date().toISOString() }
       this.data.runs.push(run)
       while (this.data.runs.length > 100) { const index = this.data.runs.findIndex(item => !active(item) && !(item.reportId && this.repairs.has(item.reportId))); if (index < 0) throw new TaskError('queue-full'); this.data.runs.splice(index, 1) }
       return run
@@ -208,6 +245,8 @@ export class SecurityTasks {
         config.target = repairSource.target; config.ref = ''
       }
       const run: Run = { id: randomUUID(), taskId: previous.taskId, config, ...(repairSource ? { repairSource: structuredClone(repairSource) } : {}),
+        // A rescan's previous report is the one it verifies.
+        ...(config.baseline === 'previous' ? { baselineReportId: reportId } : {}),
         previousReportId: reportId, previousReportRoot: previous.reportRoot ?? this.options.settings().reportDirectory,
         ...(trigger === 'repair' && session ? { repairSessionId: session } : {}),
         status: 'queued', phase: 'queued', trigger, createdAt: new Date().toISOString() }
@@ -221,7 +260,11 @@ export class SecurityTasks {
     await this.tail
     const report = await readReport(this.reportLocation(id))
     const run = this.data.runs.find(item => item.reportId === id)
-    const comparison = run?.previousReportId ? compareFollowUp(await readReport(reportFile(run.previousReportRoot ?? this.options.settings().reportDirectory, run.previousReportId)), report) : undefined
+    const saved = suppressionFor(await readSuppressions(this.suppressionFile).catch(() => []), report.source.identity)
+    const excluded = new Set(report.findings.filter(item => item.suppression || saved(item)).map(item => item.id))
+    const compared = run?.previousReportId ? compareFollowUp(await readReport(reportFile(run.previousReportRoot ?? this.options.settings().reportDirectory, run.previousReportId)), report) : undefined
+    // Exclusions saved after the rescan apply to its comparison too, so they are not offered for another round.
+    const comparison = compared && { ...compared, items: compared.items.map(item => item.change !== 'notObserved' && excluded.has(item.id) ? { ...item, suppressed: true } : item) }
     let prPreview, prError
     if (run && !run.repair && run.config.kind === 'local') {
       this.assertOpen()
@@ -233,8 +276,7 @@ export class SecurityTasks {
     }
     const parent = run?.previousReportId && !run.repair ? this.data.runs.find(item => item.reportId === run.previousReportId) : undefined
     const chain = parent ? this.repairOrigin(parent) : undefined
-    const saved = suppressionFor(await readSuppressions(this.suppressionFile).catch(() => []), report.source.identity)
-    return structuredClone({ findings: report.findings.map(item => findingItem(item, !!item.suppression || !!saved(item))), ...(run ? { run } : {}), ...(chain ? { repairChain: { sessionId: chain.origin.repair!.sessionId, round: chain.round + 1 } } : {}),
+    return structuredClone({ findings: report.findings.map(item => findingItem(item, excluded.has(item.id))), ...(run ? { run } : {}), ...(chain ? { repairChain: { sessionId: chain.origin.repair!.sessionId, round: chain.round + 1 } } : {}),
       repairMode: run?.repair?.mode ?? this.data.tasks.find(task => task.id === run?.taskId)?.config.repairMode ?? 'pr', ...(prPreview ? { prPreview } : {}), ...(prError ? { prError } : {}),
       repairable: !!run && run.config.kind === 'local' && !run.config.ref && run.config.scope !== 'staged' && report.source.revision === 'working-tree' && !active(run),
       ...(comparison ? { comparison } : {}) })
@@ -294,14 +336,76 @@ export class SecurityTasks {
     while (current && !current.repair) { const parent: string | undefined = current.previousReportId; current = parent ? this.data.runs.find(item => item.reportId === parent) : undefined; round++ }
     return current?.repair?.admitted ? { origin: current, round } : undefined
   }
+  /** Reports owned by one admitted repair session, oldest first: the repaired report and its rescans. */
+  private repairReports(sessionId: string): Run[] | undefined {
+    const origin = this.data.runs.find(run => run.repair?.sessionId === sessionId && run.repair.admitted)
+    if (!origin?.reportId) return undefined
+    const chain = [origin]
+    for (let next = this.latestRescan(origin.reportId); next; next = this.latestRescan(next.reportId!)) chain.push(next)
+    return chain
+  }
+  /**
+   * Reports a conversation may act on, newest first: its repair chain, scans it started or observed, or an
+   * explicitly named report of a local scan inside its workspace. Other conversations' reports stay out of reach.
+   */
+  private async sessionReports(sessionId: string, workspace: string | undefined, reportId?: string): Promise<string[]> {
+    const chain = this.repairReports(sessionId)?.map(run => run.reportId!).reverse()
+    const owned = chain ?? this.data.runs.filter(run => run.reportId && [run.sessionId, run.originSessionId, run.repairSessionId].includes(sessionId)).map(run => run.reportId!).reverse()
+    if (!reportId) return owned.slice(0, 5)
+    if (owned.includes(reportId)) return [reportId]
+    const run = this.data.runs.find(item => item.reportId === reportId)
+    if (run && workspace && run.config.kind === 'local') {
+      try { if (inside(await realpath(workspace), await realpath(run.config.target))) return [reportId] } catch { /* A moved target cannot prove workspace ownership. */ }
+    }
+    throw new TaskError('report-not-found')
+  }
+  /** Resolve finding IDs to the newest reachable report containing each, for preview and exclusion. */
+  async exclusionTargets(sessionId: string, workspace: string | undefined, findingIds: string[], reportId?: string): Promise<Array<{ reportId: string; finding: Finding }>> {
+    this.assertOpen()
+    await this.tail
+    const ids = z.array(z.string().min(1).max(200)).min(1).max(20).parse(findingIds)
+    if (new Set(ids).size !== ids.length) throw new TaskError('unknown-finding')
+    const candidates = await this.sessionReports(sessionId, workspace, reportId)
+    if (!candidates.length) throw new TaskError('report-not-found')
+    const reports = await Promise.all(candidates.map(async id => ({ reportId: id, report: await readReport(this.reportLocation(id)) })))
+    return ids.map(id => {
+      for (const { reportId: owner, report } of reports) {
+        const finding = report.findings.find(item => item.id === id && item.status !== 'dismissed')
+        if (!finding) continue
+        if (finding.engine === 'llm') throw new TaskError('finding-not-suppressible')
+        return { reportId: owner, finding }
+      }
+      throw new TaskError('unknown-finding')
+    })
+  }
+  /** Actionable findings of a report for the conversation that owns it: not dismissed and not excluded by the user. */
+  async reportFindings(sessionId: string, workspace: string | undefined, requested?: string): Promise<{ reportId: string; total: number; items: ReturnType<typeof findingItem>[] }> {
+    this.assertOpen()
+    await this.tail
+    const [reportId] = await this.sessionReports(sessionId, workspace, requested)
+    if (!reportId) throw new TaskError('report-not-found')
+    const report = await readReport(this.reportLocation(reportId))
+    const saved = suppressionFor(await readSuppressions(this.suppressionFile).catch(() => []), report.source.identity)
+    const actionable = report.findings.filter(item => item.status !== 'dismissed' && !saved(item))
+    return { reportId, total: actionable.length, items: actionable.slice(0, 50).map(item => findingItem(item)) }
+  }
+  /** Record findings a conversation verified as not worth fixing; the tool layer obtains the user's approval first. */
+  async excludeFromSession(sessionId: string, workspace: string | undefined, findingIds: string[], reason: string, reportId?: string): Promise<{ added: number; existing: number }> {
+    const resolved = await this.exclusionTargets(sessionId, workspace, findingIds, reportId)
+    let added = 0, existing = 0
+    for (const owner of new Set(resolved.map(item => item.reportId))) {
+      const result = await this.suppress(owner, resolved.filter(item => item.reportId === owner).map(item => item.finding.id), reason)
+      added += result.added; existing += result.existing
+    }
+    return { added, existing }
+  }
   /** Called from the repair session itself; rescans the newest report in that repair chain. */
   async repairRescan(sessionId: string): Promise<Run> {
     this.assertOpen()
     await this.tail
-    const origin = this.data.runs.find(run => run.repair?.sessionId === sessionId && run.repair.admitted)
-    if (!origin?.reportId) throw new TaskError('repair-unavailable')
-    let latest: Run = origin
-    for (let next = this.latestRescan(origin.reportId); next; next = this.latestRescan(next.reportId!)) latest = next
+    const chain = this.repairReports(sessionId)
+    if (!chain) throw new TaskError('repair-unavailable')
+    const origin = chain[0]!, latest = chain.at(-1)!
     const pending = this.data.runs.find(run => run.taskId === origin.taskId && active(run))
     if (pending && pending.previousReportId === latest.reportId) return structuredClone(pending)
     return this.rescan(latest.reportId!, 'repair', sessionId)
@@ -323,7 +427,8 @@ export class SecurityTasks {
     // Fingerprints are stable across rescans; IDs are not. Newly added issues are always offered.
     const scope = new Set(first.findings.filter(item => origin.repair!.findingIds.includes(item.id)).map(item => item.fingerprint))
     const added = new Set(comparison.comparable ? comparison.items.filter(item => item.change === 'added').map(item => item.id) : [])
-    const findings = report.findings.filter(item => item.status !== 'dismissed' && (scope.has(item.fingerprint) || added.has(item.id))).slice(0, 20)
+    const saved = suppressionFor(await readSuppressions(this.suppressionFile).catch(() => []), report.source.identity)
+    const findings = report.findings.filter(item => item.status !== 'dismissed' && !saved(item) && (scope.has(item.fingerprint) || added.has(item.id))).slice(0, 20)
     if (!findings.length) throw new TaskError('nothing-to-repair')
     const sessionId = origin.repair!.sessionId
     await native.sessionController.prompt({ sessionId: SessionId(sessionId), requestId: randomUUID() as SessionRequestId, mode: 'queue', content: [{ type: 'text', text: repairPrompt(report, findings, this.options.reportLink?.(reportId), origin.repair, round) }] }, AbortSignal.timeout(30_000))
@@ -375,7 +480,9 @@ export class SecurityTasks {
         const request: AuditOptions = { target: config.kind === 'local' ? config.target : this.options.root, scope: config.scope, engine: config.engine, output: draftRoot, draft: true,
           semgrepPath: paths?.semgrepPath ?? settings.semgrepPath, gitleaksPath: paths?.gitleaksPath ?? settings.gitleaksPath, dependencies: config.dependencies, secrets: config.secrets, view: config.view, signal: controller.signal,
           ...(config.kind === 'remote' ? { url: config.target } : {}), ...(config.ref ? { ref: config.ref } : {}),
-          ...(config.baseline === 'git' ? { base: config.base } : {}), ...(config.baseline === 'report' ? { baseline: this.reportLocation(config.baselineId) } : {}),
+          ...(config.baseline === 'git' ? { base: config.base } : {}), ...(next.baselineReportId ? { baseline: this.reportLocation(next.baselineReportId) } : config.baseline === 'previous' ? { firstScan: true } : {}),
+          // The owned worktree is the same repository and scope at a different physical path.
+          ...(next.repairSource ? { identity: next.repairSource.sourceIdentity } : {}),
           ...(config.dynamicUrl && config.dynamicAuthorized ? { dynamicUrl: config.dynamicUrl } : {}),
           // Repair worktrees are rewritten to the original repository identity below, so match against it too.
           suppressions: { ...await loadSuppressions(this.suppressionFile), ...(next.repairSource ? { identity: next.repairSource.sourceIdentity } : {}) },
@@ -385,8 +492,6 @@ export class SecurityTasks {
           rulesAttempted = true
           if (next.repairSource) await validateRepairWorkspace(next.repairSource, controller.signal)
           result = await (this.options.audit ?? audit)(request)
-          // The owned worktree is the same repository/scope at a different physical path.
-          if (next.repairSource) { result.report.source.identity = next.repairSource.sourceIdentity; await writeFile(result.json, JSON.stringify(result.report, null, 2) + '\n', { mode: 0o600 }) }
           await this.mutate(() => { const run = this.data.runs.find(run => run.id === id)!; run.findings = result!.report.findings.length; run.diagnostics = result!.report.engines.filter(engine => ['partial', 'unavailable', 'failed'].includes(engine.status)).map(engine => (engine.name + ': ' + engine.detail).slice(0, 2000)); if (result!.report.coverage.scannedFiles < result!.report.coverage.files) run.diagnostics.push('Source coverage: ' + result!.report.coverage.scannedFiles + '/' + result!.report.coverage.files) })
           await this.publishSession(id)
           if (config.agent.enabled) await this.mutate(() => { this.data.runs.find(run => run.id === id)!.phase = 'agent' })
@@ -433,7 +538,7 @@ export class SecurityTasks {
           result = { ...result, ...await writeReport(settings.reportDirectory, result.report) }
         }
         const finalReport = result.report
-        await this.mutate(() => { const run = this.data.runs.find(run => run.id === id)!; Object.assign(run, { status: controller.signal.aborted ? run.error === 'host-restarted' ? 'interrupted' : 'cancelled' : finalReport.engines.some(engine => engine.name !== 'http' && ['failed', 'unavailable'].includes(engine.status)) || (finalReport.agent && (finalReport.agent.nativeEnd ? finalReport.agent.nativeEnd !== 'completed' : finalReport.agent.status !== 'completed')) ? 'failed' : 'succeeded', phase: 'finished', finishedAt: new Date().toISOString(), reportId: finalReport.id, reportRoot: settings.reportDirectory, findings: finalReport.findings.length, coverage: exitCode(finalReport) === 2 ? 'partial' : 'complete', resultSummary: { confirmed: finalReport.findings.filter(item => item.status === 'confirmed').length, pending: finalReport.findings.filter(item => item.status === 'needs-review').length, dismissed: finalReport.findings.filter(item => item.status === 'dismissed').length } }) })
+        await this.mutate(() => { const run = this.data.runs.find(run => run.id === id)!; Object.assign(run, { status: controller.signal.aborted ? run.error === 'host-restarted' ? 'interrupted' : 'cancelled' : finalReport.engines.some(engine => engine.name !== 'http' && ['failed', 'unavailable'].includes(engine.status)) || (finalReport.agent && (finalReport.agent.nativeEnd ? finalReport.agent.nativeEnd !== 'completed' : finalReport.agent.status !== 'completed')) ? 'failed' : 'succeeded', phase: 'finished', finishedAt: new Date().toISOString(), reportId: finalReport.id, reportRoot: settings.reportDirectory, findings: finalReport.findings.length, coverage: exitCode(finalReport) === 2 ? 'partial' : 'complete', resultSummary: { confirmed: finalReport.findings.filter(item => item.status === 'confirmed').length, pending: finalReport.findings.filter(item => item.status === 'needs-review').length, dismissed: finalReport.findings.filter(item => item.status === 'dismissed').length, ...(finalReport.baseline?.comparable ? { added: finalReport.findings.filter(item => item.change === 'new' && item.status !== 'dismissed').length } : {}) } }) })
       } catch (error) {
         if (!controller.signal.aborted) this.options.log(error)
         await this.mutate(() => { const run = this.data.runs.find(run => run.id === id)!; Object.assign(run, { status: controller.signal.aborted ? run.error === 'host-restarted' ? 'interrupted' : 'cancelled' : 'failed', phase: 'finished', finishedAt: new Date().toISOString(), error: controller.signal.aborted ? run.error ?? 'cancelled' : 'scan-failed' }) })

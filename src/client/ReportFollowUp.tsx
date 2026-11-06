@@ -19,6 +19,20 @@ export function ReportFollowUp({ id, remote, t, busy, runs, action, openSession,
     void remote.reportActions(id).then(value => { if (!disposed) { setData(value); setMode(value.repairMode) } }).catch(error => { if (!disposed) setError(error instanceof Error ? error.message : 'operation-failed') })
     return () => { disposed = true }
   }, [id, remote])
+  // A running repair session can exclude findings or record its PR; follow those changes without a manual refresh.
+  const following = !!data?.run?.repair?.admitted
+  useEffect(() => {
+    if (!following) return
+    let disposed = false
+    const timer = setInterval(() => {
+      void remote.reportActions(id).then(value => {
+        if (disposed) return
+        setData(value)
+        setSelected(current => current.filter(key => value.findings.some(item => item.id === key && item.status !== 'dismissed' && !item.suppressed)))
+      }).catch(() => {})
+    }, 5000)
+    return () => { disposed = true; clearInterval(timer) }
+  }, [following, id, remote])
   if (error) return <div className="alert" role="alert">{t(errorKey(error))}</div>
   if (!data) return <p role="status">{t('loading')}</p>
   const rescan = runs.find(run => run.previousReportId === id)
@@ -27,7 +41,9 @@ export function ReportFollowUp({ id, remote, t, busy, runs, action, openSession,
   const findings = data.findings.filter(item => item.status !== 'dismissed' && !item.suppressed)
   const suppressedCount = data.findings.filter(item => item.suppressed).length
   const selectedItems = findings.filter(item => selected.includes(item.id))
-  const canSuppress = !repair && selectedItems.length > 0 && selectedItems.every(item => item.suppressible)
+  // A started repair fixes its own selection; the checkboxes then choose only what to exclude.
+  const canSuppress = selectedItems.length > 0 && selectedItems.every(item => item.suppressible)
+  const inRepair = new Set(repair?.findingIds ?? [])
   const pickable = data.repairable || findings.some(item => item.suppressible)
   const visible = findings.filter(item => (item.title + ' ' + place(item)).toLowerCase().includes(query.trim().toLowerCase())
     && (!category || item.category === category) && (!severity || item.severity === severity) && (!status || item.status === status))
@@ -37,7 +53,8 @@ export function ReportFollowUp({ id, remote, t, busy, runs, action, openSession,
   const addCount = Math.min(capacity, available.length)
   const confirmed = findings.filter(item => item.status === 'confirmed'), severe = findings.filter(item => item.severity === 'critical' || item.severity === 'high')
   const addAll = (items: Item[]) => { setPickerOpen(true); setSelected(current => [...new Set([...current, ...items.map(item => item.id)])].slice(0, 20)) }
-  const leftover = data.comparison?.items.filter(item => item.change !== 'notObserved').length ?? 0
+  // Findings dismissed by review or excluded by the user are not offered for another round.
+  const leftover = data.comparison?.items.filter(item => item.change !== 'notObserved' && item.status !== 'dismissed' && !item.suppressed).length ?? 0
   const canContinue = !!data.repairChain && leftover > 0
   // Where the user is in select → repair → rescan → compare; a rescan report is already at the comparison.
   const stage = data.comparison ? 3 : rescan ? (rescan.reportId ? 3 : 2) : repair?.admitted ? 2 : repair || selected.length ? 1 : 0
@@ -47,9 +64,10 @@ export function ReportFollowUp({ id, remote, t, busy, runs, action, openSession,
     {data.repairable || data.comparison ? <><ol className="stepper">{steps.map((key, index) => <li key={key} className={index < stage ? 'done' : index === stage ? 'current' : ''} aria-current={index === stage ? 'step' : undefined}><span className="step-dot" aria-hidden="true">{index < stage ? '✓' : index + 1}</span>{t(key)}</li>)}</ol>
     <p className="muted step-hint">{t(stepHints[stage]!)}</p></> : null}
     {data.repairable && findings.length && !repair && (confirmed.length || severe.length) ? <div className="quick-select">{confirmed.length ? quickSelect('quickConfirmed', confirmed) : null}{severe.length ? quickSelect('quickHigh', severe) : null}{selected.length ? <span className="muted">{t('selectedFindings')} {selected.length}/20</span> : null}</div> : null}
-    {pickable && findings.length ? <details className="finding-picker" open={!!repair || pickerOpen || undefined} onToggle={event => setPickerOpen(event.currentTarget.open)}>
-      <summary>{repair ? t('repairStarted') : t('selectFindings')} · {repair ? repair.findingIds.length : selected.length}/20</summary>
-      {!repair ? <>
+    {repair ? <p className="muted">{t('repairStarted')} · {repair.findingIds.length} · {t('repairExcludeHint')}</p> : null}
+    {pickable && findings.length ? <details className="finding-picker" open={pickerOpen || undefined} onToggle={event => setPickerOpen(event.currentTarget.open)}>
+      <summary>{t(repair ? 'selectToExclude' : 'selectFindings')} · {selected.length}/20</summary>
+      <>
         <input className="search" disabled={busy} aria-label={t('findingSearch')} placeholder={t('findingSearch')} value={query} onChange={event => setQuery(event.target.value)} />
         <div className="finding-filters">
           <label>{t('findingType')}<select aria-label={t('findingType')} disabled={busy} value={category} onChange={event => setCategory(event.target.value)}><option value="">{t('allTypes')}</option>{(['sourceRisk', 'dependencyRisk', 'secretRisk', 'dynamicRisk'] as const).filter(key => key !== 'dynamicRisk' || findings.some(item => item.category === key)).map(key => <option key={key} value={key}>{t(key)} ({findings.filter(item => item.category === key).length})</option>)}</select></label>
@@ -74,8 +92,8 @@ export function ReportFollowUp({ id, remote, t, busy, runs, action, openSession,
           <div className="actions"><button className="primary" type="submit" disabled={busy || !reason.trim() || !canSuppress}>{t('suppressConfirm')} ({selectedItems.length})</button><button type="button" disabled={busy} onClick={() => { setSuppressing(false); setReason('') }}>{t('cancel')}</button></div>
         </form> : null}
         <p className="muted" role="status">{t('matchingFindings')} {visible.length} · {t('selectedFindings')} {selected.length}/20 · {t('hiddenSelected')} {selected.length - selectedVisible}{selected.length === 20 ? ' · ' + t('selectionLimit') : ''}</p>
-      </> : null}
-      <div className="finding-list">{(repair ? findings.filter(item => repair.findingIds.includes(item.id)) : visible).map(item => <label key={item.id} className="finding-row"><input type="checkbox" checked={repair ? true : selected.includes(item.id)} disabled={busy || !!repair || (!selected.includes(item.id) && selected.length >= 20)} onChange={event => setSelected(current => event.target.checked ? [...current, item.id] : current.filter(key => key !== item.id))} /><span className="grow"><strong>{item.title}</strong><small>{t(item.category)} · {place(item)} · {t(item.status === 'confirmed' ? 'resultConfirmed' : 'resultPending')}</small></span><span className="tag">{t(item.severity)}</span></label>)}{!visible.length && !repair ? <p className="empty">{t('noMatches')}</p> : null}</div>
+      </>
+      <div className="finding-list">{visible.map(item => <label key={item.id} className="finding-row"><input type="checkbox" checked={selected.includes(item.id)} disabled={busy || (!selected.includes(item.id) && selected.length >= 20)} onChange={event => setSelected(current => event.target.checked ? [...current, item.id] : current.filter(key => key !== item.id))} /><span className="grow"><strong>{item.title}</strong><small>{t(item.category)} · {place(item)} · {t(item.status === 'confirmed' ? 'resultConfirmed' : 'resultPending')}</small></span>{inRepair.has(item.id) ? <span className="tag ai">{t('inRepair')}</span> : null}<span className="tag">{t(item.severity)}</span></label>)}{!visible.length ? <p className="empty">{t('noMatches')}</p> : null}</div>
     </details> : null}
     {!data.repairable || !findings.length ? <p className="muted">{findings.length ? t('repairUnavailable') : t('noActionable')}</p> : null}
     {data.repairable && findings.length ? <div className="repair-delivery">

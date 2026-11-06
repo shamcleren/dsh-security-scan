@@ -13,18 +13,18 @@ A security scanning workbench for [DeepSeek Harness](https://github.com/deepseek
 - **Read-only runtime check**: at most 12 same-origin GET requests against a URL you authorize, checking security headers, cookie flags, CORS, debug pages and exposed `.git` / `.env` files.
 - **Optional AI review**: your configured DSH model reads source, traces callers, confirms or dismisses candidates and adds business risks such as missing authorization. Every conclusion cites lines it actually read.
 - **Repair loop**: select findings in a report and send them to a DSH session, which by default fixes and verifies them on a separate branch, then rescans and shows what remains for the next round.
-- **False-positive exclusions**: excluded findings stay hidden in later scans and reappear when the code changes.
-- **Reports and integrations**: offline HTML, JSON and SARIF; optionally only findings new relative to a target branch; the `dsh-security` CLI, Git hooks and CI reuse the same rules.
+- **False-positive exclusions**: mark findings in the report, or let the repair session exclude verified false positives after you approve; later scans hide them, and they reappear when the code changes.
+- **Reports and integrations**: offline HTML, JSON and SARIF; each scan compares with the task's previous report automatically, or with a target branch, to show only new findings; the `dsh-security` CLI, Git hooks and CI reuse the same rules.
 
 ## Install
 
 Requires official DSH **0.2.1-rc.5**. Other versions have not been verified.
 
 ```sh
-dsh plugin --profile web add https://github.com/shamcleren/dsh-security-scan/releases/download/v0.17.1/shamcleren-dsh-security-scan-0.17.1.tgz
+dsh plugin --profile web add @shamcleren/dsh-security-scan@0.18.0
 ```
 
-You can also paste this URL under **Plugins → Add plugin** in the DSH sidebar. For the official desktop app, replace `web` with the `desktop` profile you use. Restart DSH and open **Security Scan** in the upper sidebar. On first use the plugin downloads and verifies Semgrep, Gitleaks and a private Python into `~/.dsh/security-scan/toolchains/` without changing the system environment.
+You can also enter `@shamcleren/dsh-security-scan@0.18.0` under **Plugins → Add plugin** in the DSH sidebar. The command pins the version because the pnpm used by DSH does not pick versions published less than a day ago; to upgrade, use the newest version from the [releases](https://github.com/shamcleren/dsh-security-scan/releases). The npm package and the Release `.tgz` are the same file, so the Release URL also works. For the official desktop app, replace `web` with the `desktop` profile you use. Restart DSH and open **Security Scan** in the upper sidebar. On first use the plugin downloads and verifies Semgrep, Gitleaks and a private Python into `~/.dsh/security-scan/toolchains/` without changing the system environment.
 
 ## First scan
 

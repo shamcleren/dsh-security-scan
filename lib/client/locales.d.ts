@@ -216,11 +216,14 @@ export declare const zh: {
     readonly baseline: "比较基线";
     readonly none: "不比较";
     readonly git: "Git 分支 / 提交";
-    readonly report: "历史报告";
+    readonly previousBaseline: "上一次报告（默认）";
     readonly base: "基线分支或提交";
     readonly baseHint: "增量扫描使用它与当前提交的共同祖先。";
-    readonly baselineId: "选择历史报告";
-    readonly selectReport: "请选择报告";
+    readonly previousBaselineNext: "下次运行将对比 {date} 的报告，只把之后出现的问题标为新增。";
+    readonly previousBaselineFirst: "还没有已完成的报告：第一次扫描不做对比，之后每次自动对比上一份报告。";
+    readonly comparedWith: "查看对比的上次报告";
+    readonly firstScan: "首次扫描，未对比";
+    readonly resultAdded: "新增";
     readonly engine: "扫描方式";
     readonly auto: "静态规则扫描";
     readonly inventory: "仅盘点文件（不执行安全规则）";
@@ -229,6 +232,7 @@ export declare const zh: {
     readonly secrets: "检测泄漏密钥";
     readonly secretsHint: "插件自动准备 Gitleaks；报告只保留脱敏位置。";
     readonly view: "报告初始筛选";
+    readonly viewHint: "只影响打开报告时的默认筛选；没有可对比的基线时显示全部问题。";
     readonly all: "全部问题";
     readonly new: "新增问题";
     readonly autoScan: "DSH 编辑后自动检查";
@@ -238,9 +242,9 @@ export declare const zh: {
     readonly confirmDelete: "确认删除";
     readonly deleted: "已删除";
     readonly deleteRunHint: "永久删除这条运行记录。扫描任务、历史报告和 DSH 对话会保留。";
-    readonly deleteReportHint: "永久删除这份报告的 HTML、JSON 及内含的代码证据，无法恢复。保留运行记录和 DSH 对话；已导出的副本不受影响。正在使用的基线报告不可删除。";
+    readonly deleteReportHint: "永久删除这份报告的 HTML、JSON 及内含的代码证据，无法恢复。保留运行记录和 DSH 对话；已导出的副本不受影响。删除后，下次扫描自动对比更早的一份报告；正在运行的扫描正在使用的报告不可删除。";
     readonly runBusy: "扫描仍在执行或收尾，请结束后再删除。";
-    readonly reportInUse: "报告正被任务用作基线或正在执行的扫描使用，请先修改基线配置并等待扫描结束。";
+    readonly reportInUse: "正在执行的扫描或修复正在使用这份报告，请等待结束后再删除。";
     readonly runNotFound: "记录已不存在，请刷新列表。";
     readonly reportNotFound: "报告已不存在，请刷新列表。";
     readonly unsafeReportDelete: "报告目录包含未知内容、链接或无效数据，未执行删除。请检查报告目录。";
@@ -358,6 +362,9 @@ export declare const zh: {
     readonly suppressReasonHint: "例如：参数来自内部常量配置，不接收外部输入。";
     readonly suppressConfirm: "确认排除";
     readonly suppressDone: "已排除 {n} 项，之后的扫描会自动隐藏。";
+    readonly selectToExclude: "选择要标记为误报的问题";
+    readonly inRepair: "修复中";
+    readonly repairExcludeHint: "修复会话核实为误报的问题，可在会话里同意排除，也可以在下方手动标记。";
     readonly suppressedTag: "你已排除";
     readonly suppressedCount: "已被你排除";
     readonly suppressAiOnly: "AI 补充的发现没有稳定指纹，无法在后续扫描中自动排除。";
