@@ -6,15 +6,16 @@ type Item = ReportActions['findings'][number]
 const place = (item: Pick<Item, 'file' | 'line' | 'endpoint'>): string => item.endpoint ?? item.file + ':' + item.line
 const steps = ['stepSelect', 'stepRepair', 'stepRescan', 'stepCompare'] as const
 const stepHints = ['selectionHint', 'repairHint', 'rescanHint', 'compareHint'] as const
-type Props = { id: string; remote: UiRemote; t(key: LocaleKey): string; busy: boolean; runs: Run[]; action(operation: () => Promise<void>): Promise<void>; openSession(id: string): void; showRuns(): void; openReport(id: string): void }
-export function ReportFollowUp({ id, remote, t, busy, runs, action, openSession, showRuns, openReport }: Props) {
+type Props = { id: string; remote: UiRemote; t(key: LocaleKey): string; busy: boolean; runs: Run[]; action(operation: () => Promise<void>): Promise<void>; openSession(id: string): void; showRuns(): void; openReport(id: string): void; notify?(message: string): void }
+export function ReportFollowUp({ id, remote, t, busy, runs, action, openSession, showRuns, openReport, notify }: Props) {
   const [data, setData] = useState<ReportActions>(), [error, setError] = useState('')
   const [mode, setMode] = useState<'pr' | 'local'>('pr')
   const [selected, setSelected] = useState<string[]>([]), [query, setQuery] = useState(''), [pickerOpen, setPickerOpen] = useState(false)
   const [category, setCategory] = useState(''), [severity, setSeverity] = useState(''), [status, setStatus] = useState('')
+  const [suppressing, setSuppressing] = useState(false), [reason, setReason] = useState('')
   useEffect(() => {
     let disposed = false
-    setData(undefined); setSelected([]); setPickerOpen(false); setError(''); setQuery(''); setCategory(''); setSeverity(''); setStatus('')
+    setData(undefined); setSelected([]); setPickerOpen(false); setError(''); setQuery(''); setCategory(''); setSeverity(''); setStatus(''); setSuppressing(false); setReason('')
     void remote.reportActions(id).then(value => { if (!disposed) { setData(value); setMode(value.repairMode) } }).catch(error => { if (!disposed) setError(error instanceof Error ? error.message : 'operation-failed') })
     return () => { disposed = true }
   }, [id, remote])
@@ -22,7 +23,12 @@ export function ReportFollowUp({ id, remote, t, busy, runs, action, openSession,
   if (!data) return <p role="status">{t('loading')}</p>
   const rescan = runs.find(run => run.previousReportId === id)
   const repair = data.run?.repair
-  const findings = data.findings.filter(item => item.status !== 'dismissed')
+  // Exclusions saved after this report was written also leave the actionable list immediately.
+  const findings = data.findings.filter(item => item.status !== 'dismissed' && !item.suppressed)
+  const suppressedCount = data.findings.filter(item => item.suppressed).length
+  const selectedItems = findings.filter(item => selected.includes(item.id))
+  const canSuppress = !repair && selectedItems.length > 0 && selectedItems.every(item => item.suppressible)
+  const pickable = data.repairable || findings.some(item => item.suppressible)
   const visible = findings.filter(item => (item.title + ' ' + place(item)).toLowerCase().includes(query.trim().toLowerCase())
     && (!category || item.category === category) && (!severity || item.severity === severity) && (!status || item.status === status))
   const selectedVisible = visible.filter(item => selected.includes(item.id)).length
@@ -37,11 +43,11 @@ export function ReportFollowUp({ id, remote, t, busy, runs, action, openSession,
   const stage = data.comparison ? 3 : rescan ? (rescan.reportId ? 3 : 2) : repair?.admitted ? 2 : repair || selected.length ? 1 : 0
   const quickSelect = (label: LocaleKey, items: Item[]) => <button disabled={busy || !capacity || items.every(item => selected.includes(item.id))} onClick={() => addAll(items)}>{t(label)} ({items.length})</button>
   return <section className="card follow-up" aria-label={t('nextSteps')}>
-    <div className="card-head"><div className="grow"><h2>{t('nextSteps')}</h2><p className="muted">{t('followUpHint')}</p></div><span className="tag">{findings.length} {t('actionable')}</span></div>
+    <div className="card-head"><div className="grow"><h2>{t('nextSteps')}</h2><p className="muted">{t('followUpHint')}</p></div><span className="tag">{findings.length} {t('actionable')}</span>{suppressedCount ? <span className="tag">{suppressedCount} {t('suppressedCount')}</span> : null}</div>
     {data.repairable || data.comparison ? <><ol className="stepper">{steps.map((key, index) => <li key={key} className={index < stage ? 'done' : index === stage ? 'current' : ''} aria-current={index === stage ? 'step' : undefined}><span className="step-dot" aria-hidden="true">{index < stage ? '✓' : index + 1}</span>{t(key)}</li>)}</ol>
     <p className="muted step-hint">{t(stepHints[stage]!)}</p></> : null}
     {data.repairable && findings.length && !repair && (confirmed.length || severe.length) ? <div className="quick-select">{confirmed.length ? quickSelect('quickConfirmed', confirmed) : null}{severe.length ? quickSelect('quickHigh', severe) : null}{selected.length ? <span className="muted">{t('selectedFindings')} {selected.length}/20</span> : null}</div> : null}
-    {data.repairable && findings.length ? <details className="finding-picker" open={!!repair || pickerOpen || undefined} onToggle={event => setPickerOpen(event.currentTarget.open)}>
+    {pickable && findings.length ? <details className="finding-picker" open={!!repair || pickerOpen || undefined} onToggle={event => setPickerOpen(event.currentTarget.open)}>
       <summary>{repair ? t('repairStarted') : t('selectFindings')} · {repair ? repair.findingIds.length : selected.length}/20</summary>
       {!repair ? <>
         <input className="search" disabled={busy} aria-label={t('findingSearch')} placeholder={t('findingSearch')} value={query} onChange={event => setQuery(event.target.value)} />
@@ -55,11 +61,23 @@ export function ReportFollowUp({ id, remote, t, busy, runs, action, openSession,
           <button disabled={busy || !selectedVisible} onClick={() => setSelected(current => current.filter(key => !visible.some(item => item.id === key)))}>{t('deselectVisible')}</button>
           <button disabled={busy || !selected.length} onClick={() => setSelected([])}>{t('clearSelection')}</button>
           <button disabled={busy || !(query || category || severity || status)} onClick={() => { setQuery(''); setCategory(''); setSeverity(''); setStatus('') }}>{t('resetFilters')}</button>
+          <button disabled={busy || !canSuppress || suppressing} onClick={() => setSuppressing(true)}>{t('suppressSelected')}{selectedItems.length ? ' (' + selectedItems.length + ')' : ''}</button>
         </div>
+        {selectedItems.some(item => !item.suppressible) ? <p className="muted">{t('suppressAiOnly')}</p> : null}
+        {suppressing ? <form className="suppress-form" aria-label={t('suppressTitle')} onSubmit={event => { event.preventDefault(); void action(async () => {
+          const result = await remote.suppress(id, selectedItems.map(item => item.id), reason.trim())
+          setSuppressing(false); setReason(''); setSelected([])
+          notify?.(t('suppressDone').replace('{n}', String(result.added + result.existing)))
+          setData(await remote.reportActions(id))
+        }) }}><strong>{t('suppressTitle')}</strong><p className="muted">{t('suppressHint')}</p>
+          <label>{t('suppressReason')}<textarea required maxLength={500} disabled={busy} value={reason} placeholder={t('suppressReasonHint')} onChange={event => setReason(event.target.value)} /></label>
+          <div className="actions"><button className="primary" type="submit" disabled={busy || !reason.trim() || !canSuppress}>{t('suppressConfirm')} ({selectedItems.length})</button><button type="button" disabled={busy} onClick={() => { setSuppressing(false); setReason('') }}>{t('cancel')}</button></div>
+        </form> : null}
         <p className="muted" role="status">{t('matchingFindings')} {visible.length} · {t('selectedFindings')} {selected.length}/20 · {t('hiddenSelected')} {selected.length - selectedVisible}{selected.length === 20 ? ' · ' + t('selectionLimit') : ''}</p>
       </> : null}
       <div className="finding-list">{(repair ? findings.filter(item => repair.findingIds.includes(item.id)) : visible).map(item => <label key={item.id} className="finding-row"><input type="checkbox" checked={repair ? true : selected.includes(item.id)} disabled={busy || !!repair || (!selected.includes(item.id) && selected.length >= 20)} onChange={event => setSelected(current => event.target.checked ? [...current, item.id] : current.filter(key => key !== item.id))} /><span className="grow"><strong>{item.title}</strong><small>{t(item.category)} · {place(item)} · {t(item.status === 'confirmed' ? 'resultConfirmed' : 'resultPending')}</small></span><span className="tag">{t(item.severity)}</span></label>)}{!visible.length && !repair ? <p className="empty">{t('noMatches')}</p> : null}</div>
-    </details> : <p className="muted">{findings.length ? t('repairUnavailable') : t('noActionable')}</p>}
+    </details> : null}
+    {!data.repairable || !findings.length ? <p className="muted">{findings.length ? t('repairUnavailable') : t('noActionable')}</p> : null}
     {data.repairable && findings.length ? <div className="repair-delivery">
       <label>{t('repairDelivery')}<select aria-label={t('repairDelivery')} value={repair?.mode ?? mode} disabled={busy || !!repair} onChange={event => setMode(event.target.value as 'pr' | 'local')}><option value="pr">{t('deliveryPr')}</option><option value="local">{t('deliveryLocal')}</option></select></label>
       <p className="muted">{t((repair?.mode ?? mode) === 'pr' ? 'deliveryPrHint' : 'deliveryLocalHint')}</p>

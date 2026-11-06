@@ -337,6 +337,446 @@
       "cwe": "CWE-918",
       "label": "vulnerable",
       "rationale": "The server fetches a caller-chosen URL without an allowed destination policy."
+    },
+    {
+      "id": "python-sql-vulnerable",
+      "file": "python/python-sql-vulnerable.py",
+      "language": "python",
+      "cwe": "CWE-89",
+      "label": "vulnerable",
+      "rationale": "A Django view interpolates a query parameter into raw SQL with an f-string."
+    },
+    {
+      "id": "python-sql-fixed",
+      "file": "python/python-sql-fixed.py",
+      "language": "python",
+      "cwe": "CWE-89",
+      "label": "safe",
+      "rationale": "The same Django query passes the value as a bound parameter."
+    },
+    {
+      "id": "python-django-raw-params",
+      "file": "python/python-django-raw-params.py",
+      "language": "python",
+      "cwe": "CWE-89",
+      "label": "safe",
+      "rationale": "Model.objects.raw receives a constant query and bound parameters."
+    },
+    {
+      "id": "python-template-vulnerable",
+      "file": "python/python-template-vulnerable.py",
+      "language": "python",
+      "cwe": "CWE-1336",
+      "label": "vulnerable",
+      "rationale": "A Flask route concatenates a query parameter into template source passed to render_template_string."
+    },
+    {
+      "id": "python-template-fixed",
+      "file": "python/python-template-fixed.py",
+      "language": "python",
+      "cwe": "CWE-1336",
+      "label": "safe",
+      "rationale": "The template source is a module constant; user input is passed only as an escaped template variable."
+    },
+    {
+      "id": "python-html-vulnerable",
+      "file": "python/python-html-vulnerable.py",
+      "language": "python",
+      "cwe": "CWE-79",
+      "label": "vulnerable",
+      "rationale": "A Django view marks HTML containing a query parameter as safe."
+    },
+    {
+      "id": "python-html-fixed",
+      "file": "python/python-html-fixed.py",
+      "language": "python",
+      "cwe": "CWE-79",
+      "label": "safe",
+      "rationale": "format_html escapes the query parameter before marking the result safe."
+    },
+    {
+      "id": "python-debug-vulnerable",
+      "file": "python/python-debug-vulnerable.py",
+      "language": "python",
+      "cwe": "CWE-489",
+      "label": "vulnerable",
+      "rationale": "The Flask development server listens on all interfaces with the interactive debugger enabled."
+    },
+    {
+      "id": "python-debug-fixed",
+      "file": "python/python-debug-fixed.py",
+      "language": "python",
+      "cwe": "CWE-489",
+      "label": "safe",
+      "rationale": "Debug mode is opt-in through an environment variable and the server binds to loopback."
+    },
+    {
+      "id": "python-jwt-vulnerable",
+      "file": "python/python-jwt-vulnerable.py",
+      "language": "python",
+      "cwe": "CWE-347",
+      "label": "vulnerable",
+      "rationale": "The caller identity is taken from a JWT without verifying its signature."
+    },
+    {
+      "id": "python-jwt-fixed",
+      "file": "python/python-jwt-fixed.py",
+      "language": "python",
+      "cwe": "CWE-347",
+      "label": "safe",
+      "rationale": "The token is verified with a key and a fixed algorithm list."
+    },
+    {
+      "id": "python-ssrf-vulnerable",
+      "file": "python/python-ssrf-vulnerable.py",
+      "language": "python",
+      "cwe": "CWE-918",
+      "label": "vulnerable",
+      "rationale": "A Flask route fetches a caller-chosen URL from the JSON body without a destination policy."
+    },
+    {
+      "id": "python-ssrf-fixed",
+      "file": "python/python-ssrf-fixed.py",
+      "language": "python",
+      "cwe": "CWE-918",
+      "label": "safe",
+      "rationale": "The caller selects a key; destinations come from a constant table."
+    },
+    {
+      "id": "python-path-vulnerable",
+      "file": "python/python-path-vulnerable.py",
+      "language": "python",
+      "cwe": "CWE-22",
+      "label": "vulnerable",
+      "rationale": "A Flask route opens a file joined from a query parameter without a root-boundary check."
+    },
+    {
+      "id": "python-path-fixed",
+      "file": "python/python-path-fixed.py",
+      "language": "python",
+      "cwe": "CWE-22",
+      "label": "safe",
+      "rationale": "secure_filename removes path separators before the file is served."
+    },
+    {
+      "id": "python-redirect-vulnerable",
+      "file": "python/python-redirect-vulnerable.py",
+      "language": "python",
+      "cwe": "CWE-601",
+      "label": "vulnerable",
+      "rationale": "A Flask route redirects to a caller-supplied next URL."
+    },
+    {
+      "id": "python-redirect-fixed",
+      "file": "python/python-redirect-fixed.py",
+      "language": "python",
+      "cwe": "CWE-601",
+      "label": "safe",
+      "rationale": "Django url_has_allowed_host_and_scheme restricts the redirect to the current host."
+    },
+    {
+      "id": "js-sql-fixed",
+      "file": "javascript/js-sql-fixed.js",
+      "language": "javascript",
+      "cwe": "CWE-89",
+      "label": "safe",
+      "rationale": "The Express route passes the query value as a bound node-postgres parameter."
+    },
+    {
+      "id": "ts-sql-vulnerable",
+      "file": "typescript/ts-sql-vulnerable.ts",
+      "language": "typescript",
+      "cwe": "CWE-89",
+      "label": "vulnerable",
+      "rationale": "A route parameter is interpolated into SQL with a template literal before pool.query."
+    },
+    {
+      "id": "ts-sql-fixed",
+      "file": "typescript/ts-sql-fixed.ts",
+      "language": "typescript",
+      "cwe": "CWE-89",
+      "label": "safe",
+      "rationale": "Only literals are concatenated; the route parameter is bound."
+    },
+    {
+      "id": "ts-ssrf-fixed",
+      "file": "typescript/ts-ssrf-fixed.ts",
+      "language": "typescript",
+      "cwe": "CWE-918",
+      "label": "safe",
+      "rationale": "The request goes to a fixed origin; the caller controls only an encoded path segment."
+    },
+    {
+      "id": "js-ssrf-vulnerable",
+      "file": "javascript/js-ssrf-vulnerable.js",
+      "language": "javascript",
+      "cwe": "CWE-918",
+      "label": "vulnerable",
+      "rationale": "A Koa route posts to a caller-supplied callback URL from the request body."
+    },
+    {
+      "id": "js-redirect-vulnerable",
+      "file": "javascript/js-redirect-vulnerable.js",
+      "language": "javascript",
+      "cwe": "CWE-601",
+      "label": "vulnerable",
+      "rationale": "An Express route redirects to a caller-supplied next URL."
+    },
+    {
+      "id": "js-redirect-fixed",
+      "file": "javascript/js-redirect-fixed.js",
+      "language": "javascript",
+      "cwe": "CWE-601",
+      "label": "safe",
+      "rationale": "The caller selects a key; redirect targets come from a constant table of same-site paths."
+    },
+    {
+      "id": "ts-path-vulnerable",
+      "file": "typescript/ts-path-vulnerable.ts",
+      "language": "typescript",
+      "cwe": "CWE-22",
+      "label": "vulnerable",
+      "rationale": "An Express route streams a file joined from a route parameter without a root-boundary check."
+    },
+    {
+      "id": "ts-path-fixed",
+      "file": "typescript/ts-path-fixed.ts",
+      "language": "typescript",
+      "cwe": "CWE-22",
+      "label": "safe",
+      "rationale": "sendFile receives a basename together with the root option, which rejects traversal."
+    },
+    {
+      "id": "ts-path-guarded",
+      "file": "typescript/ts-path-guarded.ts",
+      "language": "typescript",
+      "cwe": "CWE-22",
+      "label": "safe",
+      "rationale": "The resolved path is checked against the root directory before reading."
+    },
+    {
+      "id": "ts-react-html-vulnerable",
+      "file": "typescript/ts-react-html-vulnerable.tsx",
+      "language": "typescript",
+      "cwe": "CWE-79",
+      "label": "vulnerable",
+      "rationale": "A React component renders caller-controlled HTML through dangerouslySetInnerHTML; props are assumed to carry user content."
+    },
+    {
+      "id": "ts-react-html-fixed",
+      "file": "typescript/ts-react-html-fixed.tsx",
+      "language": "typescript",
+      "cwe": "CWE-79",
+      "label": "safe",
+      "rationale": "The HTML is sanitized with the standard DOMPurify configuration before rendering."
+    },
+    {
+      "id": "js-react-text",
+      "file": "javascript/js-react-text.jsx",
+      "language": "javascript",
+      "cwe": "CWE-79",
+      "label": "safe",
+      "rationale": "React escapes text children by default."
+    },
+    {
+      "id": "js-vm-vulnerable",
+      "file": "javascript/js-vm-vulnerable.js",
+      "language": "javascript",
+      "cwe": "CWE-95",
+      "label": "vulnerable",
+      "rationale": "A request body expression is evaluated with the Node vm module, which is not a security boundary."
+    },
+    {
+      "id": "js-cors-vulnerable",
+      "file": "javascript/js-cors-vulnerable.js",
+      "language": "javascript",
+      "cwe": "CWE-942",
+      "label": "vulnerable",
+      "rationale": "The cors middleware reflects any origin while allowing credentials."
+    },
+    {
+      "id": "js-cors-fixed",
+      "file": "javascript/js-cors-fixed.js",
+      "language": "javascript",
+      "cwe": "CWE-942",
+      "label": "safe",
+      "rationale": "Credentialed CORS is limited to an explicit origin list."
+    },
+    {
+      "id": "ts-next-ssrf",
+      "file": "typescript/ts-next-ssrf.ts",
+      "language": "typescript",
+      "cwe": "CWE-918",
+      "label": "vulnerable",
+      "rationale": "A Next.js route handler fetches a URL taken from the search parameters."
+    },
+    {
+      "id": "js-shell-template",
+      "file": "javascript/js-shell-template.js",
+      "language": "javascript",
+      "cwe": "CWE-78",
+      "label": "vulnerable",
+      "rationale": "A request body value is interpolated into a shell command with a template literal."
+    },
+    {
+      "id": "go-path-fixed",
+      "file": "go/go-path-fixed.go",
+      "language": "go",
+      "cwe": "CWE-22",
+      "label": "safe",
+      "rationale": "filepath.Base removes directory components before the file is read."
+    },
+    {
+      "id": "go-path-guarded",
+      "file": "go/go-path-guarded.go",
+      "language": "go",
+      "cwe": "CWE-22",
+      "label": "safe",
+      "rationale": "filepath.IsLocal rejects absolute and parent-relative paths before the read."
+    },
+    {
+      "id": "go-gin-path-vulnerable",
+      "file": "go/go-gin-path-vulnerable.go",
+      "language": "go",
+      "cwe": "CWE-22",
+      "label": "vulnerable",
+      "rationale": "A Gin route serves a file joined from a query parameter without a root-boundary check."
+    },
+    {
+      "id": "go-redirect-vulnerable",
+      "file": "go/go-redirect-vulnerable.go",
+      "language": "go",
+      "cwe": "CWE-601",
+      "label": "vulnerable",
+      "rationale": "A net/http handler redirects to a caller-supplied next URL."
+    },
+    {
+      "id": "go-redirect-fixed",
+      "file": "go/go-redirect-fixed.go",
+      "language": "go",
+      "cwe": "CWE-601",
+      "label": "safe",
+      "rationale": "The caller selects a key in an allow-list map of same-site paths."
+    },
+    {
+      "id": "go-ssrf-vulnerable",
+      "file": "go/go-ssrf-vulnerable.go",
+      "language": "go",
+      "cwe": "CWE-918",
+      "label": "vulnerable",
+      "rationale": "A handler fetches a caller-supplied URL from a form value."
+    },
+    {
+      "id": "go-ssrf-fixed",
+      "file": "go/go-ssrf-fixed.go",
+      "language": "go",
+      "cwe": "CWE-918",
+      "label": "safe",
+      "rationale": "The request goes to a fixed origin with an escaped path segment."
+    },
+    {
+      "id": "go-html-vulnerable",
+      "file": "go/go-html-vulnerable.go",
+      "language": "go",
+      "cwe": "CWE-79",
+      "label": "vulnerable",
+      "rationale": "A form value is converted to template.HTML, bypassing html/template escaping."
+    },
+    {
+      "id": "go-html-fixed",
+      "file": "go/go-html-fixed.go",
+      "language": "go",
+      "cwe": "CWE-79",
+      "label": "safe",
+      "rationale": "The form value is passed as a plain string and escaped by html/template."
+    },
+    {
+      "id": "go-sql-concat",
+      "file": "go/go-sql-concat.go",
+      "language": "go",
+      "cwe": "CWE-89",
+      "label": "vulnerable",
+      "rationale": "A form value is concatenated into SQL passed to QueryRow."
+    },
+    {
+      "id": "go-gorm-fixed",
+      "file": "go/go-gorm-fixed.go",
+      "language": "go",
+      "cwe": "CWE-89",
+      "label": "safe",
+      "rationale": "GORM Where receives a constant condition with a bound placeholder."
+    },
+    {
+      "id": "python-constant-shell",
+      "file": "python/python-constant-shell.py",
+      "language": "python",
+      "cwe": "CWE-78",
+      "label": "safe",
+      "rationale": "The shell command is a module-level string constant with no external input."
+    },
+    {
+      "id": "ts-constant-html",
+      "file": "typescript/ts-constant-html.ts",
+      "language": "typescript",
+      "cwe": "CWE-79",
+      "label": "safe",
+      "rationale": "The HTML is a module-level string constant; the rule does not resolve the constant and still reports a candidate."
+    },
+    {
+      "id": "go-sql-constant-table",
+      "file": "go/go-sql-constant-table.go",
+      "language": "go",
+      "cwe": "CWE-89",
+      "label": "safe",
+      "rationale": "Only a constant table name is concatenated; the caller value is bound."
+    },
+    {
+      "id": "js-ssrf-host-allowlist",
+      "file": "javascript/js-ssrf-host-allowlist.js",
+      "language": "javascript",
+      "cwe": "CWE-918",
+      "label": "safe",
+      "rationale": "The parsed URL must use HTTPS and an allow-listed hostname before fetching; the rule does not model this check."
+    },
+    {
+      "id": "python-path-guarded",
+      "file": "python/python-path-guarded.py",
+      "language": "python",
+      "cwe": "CWE-22",
+      "label": "safe",
+      "rationale": "The resolved path is checked against the upload root before serving."
+    },
+    {
+      "id": "python-ssrf-helper",
+      "file": "python/python-ssrf-helper.py",
+      "language": "python",
+      "cwe": "CWE-918",
+      "label": "vulnerable",
+      "rationale": "The caller URL reaches requests.get through a helper function; the bundled rules do not follow calls across functions."
+    },
+    {
+      "id": "python-django-idor",
+      "file": "python/python-django-idor.py",
+      "language": "python",
+      "cwe": "CWE-639",
+      "label": "vulnerable",
+      "rationale": "Any signed-in user can read any invoice by ID; ownership is never checked against request.user."
+    },
+    {
+      "id": "ts-missing-authorization",
+      "file": "typescript/ts-missing-authorization.ts",
+      "language": "typescript",
+      "cwe": "CWE-862",
+      "label": "vulnerable",
+      "rationale": "A destructive route deletes any project by ID without authentication or ownership checks."
+    },
+    {
+      "id": "go-missing-authorization",
+      "file": "go/go-missing-authorization.go",
+      "language": "go",
+      "cwe": "CWE-862",
+      "label": "vulnerable",
+      "rationale": "A handler returns any invoice selected by path ID without authentication or ownership checks; invoices is the application store."
     }
   ]
 }

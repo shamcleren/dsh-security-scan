@@ -39,6 +39,11 @@ export declare function reportSummary(report: Report): {
             metadataAvailable: boolean;
             locationExact: boolean;
         } | undefined;
+        suppression?: {
+            id: string;
+            reason: string;
+            createdAt: string;
+        } | undefined;
     }[];
     sourcePending: {
         id: string;
@@ -77,6 +82,11 @@ export declare function reportSummary(report: Report): {
             metadataAvailable: boolean;
             locationExact: boolean;
         } | undefined;
+        suppression?: {
+            id: string;
+            reason: string;
+            createdAt: string;
+        } | undefined;
     }[];
     secrets: {
         id: string;
@@ -114,6 +124,11 @@ export declare function reportSummary(report: Report): {
             references: string[];
             metadataAvailable: boolean;
             locationExact: boolean;
+        } | undefined;
+        suppression?: {
+            id: string;
+            reason: string;
+            createdAt: string;
         } | undefined;
     }[];
     packages: import("./report-groups.js").ReportGroup[];
@@ -154,6 +169,11 @@ export declare function reportSummary(report: Report): {
             metadataAvailable: boolean;
             locationExact: boolean;
         } | undefined;
+        suppression?: {
+            id: string;
+            reason: string;
+            createdAt: string;
+        } | undefined;
     }[];
     recheck: {
         id: string;
@@ -191,6 +211,11 @@ export declare function reportSummary(report: Report): {
             references: string[];
             metadataAvailable: boolean;
             locationExact: boolean;
+        } | undefined;
+        suppression?: {
+            id: string;
+            reason: string;
+            createdAt: string;
         } | undefined;
     }[];
     dismissed: number;

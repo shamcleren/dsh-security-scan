@@ -6,6 +6,9 @@ import { prepareSource, hash, type Scope, type Source, type Snapshot } from './r
 import { enrich, scanDependencies, scanSecrets } from './engines.js'
 import { mergeDynamic, scanDynamic } from './dynamic.js'
 import { PLUGIN_VERSION, readReport, writeReport, defaultReportsRoot, type Report, type Finding } from './report.js'
+import { RULES } from './rules.js'
+import { applySuppressions, readSuppressions } from './suppressions.js'
+import type { Suppression } from './ui-contract.js'
 
 export interface AuditOptions {
   target: string; url?: string; ref?: string; scope?: Scope; base?: string; baseline?: string; output?: string
@@ -17,6 +20,13 @@ export interface AuditOptions {
   draft?: boolean
   onProgress?: (phase: 'preparing' | 'scanning' | 'baseline' | 'dynamic' | 'report') => Promise<void>
   view?: 'all' | 'new'; failOn?: 'none' | 'high' | 'medium'; signal: AbortSignal
+  /** The user's saved exclusions. `identity` lets repair worktrees match the original repository. */
+  suppressions?: SuppressionInput
+}
+export interface SuppressionInput { items: readonly Suppression[]; identity?: string; unavailable?: boolean }
+/** An unreadable list must not block scanning; the report says that exclusions were not applied. */
+export async function loadSuppressions(file: string): Promise<SuppressionInput> {
+  try { return { items: await readSuppressions(file) } } catch { return { items: [], unavailable: true } }
 }
 async function analyze(source: Source, snapshot: Snapshot, options: AuditOptions): Promise<Pick<Report, 'findings' | 'engines' | 'coverage'>> {
   const binary = await executable(options.semgrepPath ?? 'semgrep', source.root)
@@ -28,7 +38,7 @@ async function analyze(source: Source, snapshot: Snapshot, options: AuditOptions
   const findings = await Promise.all(raw.findings.map(item => enrich(snapshot, item)))
   const status = raw.status === 'completed' ? 'completed' : raw.status === 'partial' ? 'partial' : raw.status === 'scanner-unavailable' || raw.status === 'unsupported-scanner' ? 'unavailable' : raw.status === 'scanner-failed' ? 'failed' : options.engine === 'inventory' ? 'skipped' : 'completed'
   const engines: Report['engines'] = [{ name: 'semgrep', version: SEMGREP_VERSION, status,
-    detail: 'Python / Go / JS / TS：12 类包内基础规则。状态：' + raw.status + '；' + JSON.stringify(raw.coverage.skipped) }]
+    detail: 'Python / Go / JS / TS：' + Object.keys(RULES).length + ' 条包内规则（覆盖 Flask/Django、Express/React、net/http 等常见框架入口）。状态：' + raw.status + '；' + JSON.stringify(raw.coverage.skipped) }]
   if (options.secrets) { const result = await scanSecrets(snapshot, source.root, options.gitleaksPath ?? 'gitleaks', options.signal); engines.push(result.engine); findings.push(...result.findings) }
   else engines.push({ name: 'gitleaks', version: '', status: 'skipped', detail: '未启用密钥扫描。' })
   if (options.dependencies) { const result = await scanDependencies(snapshot, options.signal); engines.push(result.engine); findings.push(...result.findings) }
@@ -84,6 +94,8 @@ export async function audit(options: AuditOptions): Promise<{ report: Report; js
       report = mergeDynamic({ ...report, policy: { ...report.policy, dynamic: dynamic.target } }, dynamic, savedBaseline)
       report.notes = [...report.notes, '运行时基线检查只对用户授权的地址发送固定的同源 GET 请求，不发送攻击载荷、不登录，报告不保存响应正文或 Cookie 值；不是完整 DAST。']
     }
+    if (options.suppressions?.items.length) report = applySuppressions(report, options.suppressions.items, options.suppressions.identity ?? report.source.identity)
+    if (options.suppressions?.unavailable) report.notes = [...report.notes, '排除记录无法读取，本次未应用你之前的排除决定；请检查 suppressions.json 的权限和格式。']
     if (!options.draft) await options.onProgress?.('report')
     return { report, ...await writeReport(options.output ?? defaultReportsRoot(), report, options.draft) }
   } finally { await source.dispose() }

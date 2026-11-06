@@ -682,6 +682,26 @@ export declare const HookRequestSchema: z.ZodObject<{
     confirm: z.ZodLiteral<true>;
 }, z.core.$strict>;
 export type HookRequest = z.infer<typeof HookRequestSchema>;
+/** A user's decision that one finding is a false positive in one repository. Matching uses stable scanner identity, never report IDs. */
+export declare const SuppressionSchema: z.ZodObject<{
+    id: z.ZodString;
+    sourceIdentity: z.ZodString;
+    sourceLabel: z.ZodString;
+    engine: z.ZodString;
+    rule: z.ZodString;
+    file: z.ZodString;
+    fingerprint: z.ZodString;
+    title: z.ZodString;
+    reason: z.ZodString;
+    createdAt: z.ZodString;
+    reportId: z.ZodString;
+}, z.core.$strict>;
+export type Suppression = z.infer<typeof SuppressionSchema>;
+export declare const SuppressRequestSchema: z.ZodObject<{
+    id: z.ZodString;
+    findingIds: z.ZodArray<z.ZodString>;
+    reason: z.ZodString;
+}, z.core.$strict>;
 export declare const FindingItemSchema: z.ZodObject<{
     category: z.ZodDefault<z.ZodEnum<{
         sourceRisk: "sourceRisk";
@@ -706,6 +726,8 @@ export declare const FindingItemSchema: z.ZodObject<{
         dismissed: "dismissed";
     }>;
     endpoint: z.ZodOptional<z.ZodString>;
+    suppressed: z.ZodDefault<z.ZodBoolean>;
+    suppressible: z.ZodDefault<z.ZodBoolean>;
 }, z.core.$strip>;
 export declare const ReportActionsSchema: z.ZodObject<{
     findings: z.ZodArray<z.ZodObject<{
@@ -732,6 +754,8 @@ export declare const ReportActionsSchema: z.ZodObject<{
             dismissed: "dismissed";
         }>;
         endpoint: z.ZodOptional<z.ZodString>;
+        suppressed: z.ZodDefault<z.ZodBoolean>;
+        suppressible: z.ZodDefault<z.ZodBoolean>;
     }, z.core.$strip>>;
     run: z.ZodOptional<z.ZodObject<{
         id: z.ZodString;
@@ -961,6 +985,8 @@ export declare const ReportActionsSchema: z.ZodObject<{
                 dismissed: "dismissed";
             }>;
             endpoint: z.ZodOptional<z.ZodString>;
+            suppressed: z.ZodDefault<z.ZodBoolean>;
+            suppressible: z.ZodDefault<z.ZodBoolean>;
             change: z.ZodEnum<{
                 notObserved: "notObserved";
                 remaining: "remaining";
@@ -1009,5 +1035,11 @@ export type UiRemote = {
         content: string;
     }>;
     report(id: string, format: 'html' | 'json'): Promise<string>;
+    suppress(id: string, findingIds: string[], reason: string): Promise<{
+        added: number;
+        existing: number;
+    }>;
+    suppressions(): Promise<Suppression[]>;
+    unsuppress(id: string): Promise<void>;
 };
 export declare const newTask: () => TaskConfig;

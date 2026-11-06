@@ -12,6 +12,9 @@ const calls = [], controls = { calls, state, offline: false, saved: 0, closed: f
 window.scanFixture = controls
 const findings = [{ id: 'one', category: 'sourceRisk', title: '外部输入直接进入命令执行', file: 'src/api.ts', line: 42, severity: 'high', status: 'confirmed' }, { id: 'two', category: 'dependencyRisk', title: '需要核实的路径访问', file: 'src/files.ts', line: 18, severity: 'medium', status: 'needs-review' }]
 findings.push(...Array.from({ length: 24 }, (_, index) => ({ id: 'secret-' + index, category: 'secretRisk', title: '凭据候选 ' + index, file: 'config/example.env', line: index + 1, severity: 'high', status: 'needs-review' })), { ...findings[0], id: 'dismissed', status: 'dismissed' })
+// The fixture bypasses schema defaults, so every finding states whether it can be excluded.
+for (const item of findings) Object.assign(item, { suppressed: false, suppressible: true })
+const suppressions = []
 // ?chain previews a rescan inside a repair chain: comparison, runtime finding and a follow-up round.
 const chain = new URL(location.href).searchParams.has('chain')
 const runtime = { id: 'http-csp', category: 'dynamicRisk', title: '页面未设置 Content-Security-Policy', file: 'http://127.0.0.1:3000/', line: 1, severity: 'low', status: 'needs-review', endpoint: 'http://127.0.0.1:3000/' }
@@ -27,6 +30,19 @@ const remote = {
   reportActions: async () => structuredClone({ ...actions, ...(controls.prError ? { prError: controls.prError, prPreview: undefined } : {}) }),
   repair: async (id, selected, mode, expectedRevision) => { calls.push({ repair: selected, mode, expectedRevision }); actions.run.repair = { mode, ...(mode === 'pr' ? { workspace: { repositoryUrl: 'https://github.com/example/project', base: 'main', commit: 'a'.repeat(40), branch: 'security/repair-fixture', target: '/fixture/repair', directory: '/fixture/repair', repository: '/workspace/sample-service', sourceIdentity: 'fixture', prUrl: 'https://github.com/example/project/pull/1' } } : {}), admitted: true, sessionId: 'repair-session', requestId: crypto.randomUUID(), findingIds: selected }; return { sessionId: 'repair-session' } },
   continueRepair: async id => { calls.push({ continueRepair: id }); return { sessionId: 'repair-session', count: 2 } },
+  suppress: async (id, ids, reason) => {
+    calls.push({ suppress: ids, reason })
+    for (const key of ids) { const item = findings.find(entry => entry.id === key); item.suppressed = true; suppressions.push({ id: crypto.randomUUID(), sourceIdentity: 'fixture', sourceLabel: config.target, engine: 'semgrep', rule: 'dsh-security.fixture', file: item.file, fingerprint: key, title: item.title, reason, createdAt: new Date().toISOString(), findingId: key }) }
+    return { added: ids.length, existing: 0 }
+  },
+  suppressions: async () => structuredClone(suppressions),
+  unsuppress: async id => {
+    calls.push({ unsuppress: id })
+    const index = suppressions.findIndex(item => item.id === id)
+    if (index < 0) throw new Error('suppression-not-found')
+    findings.find(item => item.id === suppressions[index].findingId).suppressed = false
+    suppressions.splice(index, 1)
+  },
   rescan: async () => { calls.push('rescan'); const next = { ...run, id: crypto.randomUUID(), reportId: undefined, previousReportId: reportId, status: 'queued', phase: 'queued' }; state.runs.unshift(next); return next },
 }
 function NavigationFixture() {

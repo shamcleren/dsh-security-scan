@@ -548,3 +548,41 @@ it('keeps a scan successful with partial coverage when the authorized runtime ta
   const report = JSON.parse(await f.service.report(run.reportId!, 'json'))
   expect(report.policy.dynamic).toBe('http://127.0.0.1:' + port + '/')
 })
+it('excludes findings through RPC, applies the decision to the next task scan and restores it', async () => {
+  const { applySuppressions } = await import('../src/suppressions.js')
+  // Inventory scans have no rule hits; add one deterministic Semgrep-shaped finding while keeping real suppression handling.
+  const scanner = vi.fn(async (options: Parameters<typeof audit>[0]) => {
+    const { suppressions, ...rest } = options
+    const result = await audit({ ...rest, draft: true })
+    const finding = { id: 'f1', fingerprint: 'fp-1', engine: 'semgrep', rule: 'dsh-security.python-eval', file: 'app.py', line: 1, title: 'eval', cwe: 'CWE-95', severity: 'medium' as const, status: 'needs-review' as const, change: 'unknown' as const, evidence: 'e', recommendation: 'r', verification: 'v' }
+    let report: typeof result.report = { ...result.report, id: randomUUID(), findings: [finding] }
+    if (suppressions?.items.length) report = applySuppressions(report, suppressions.items, suppressions.identity ?? report.source.identity)
+    const { writeReport } = await import('../src/report.js')
+    return { report, ...await writeReport(options.output!, report, options.draft) }
+  })
+  const f = await fixture({ audit: scanner }), task = await f.service.save(f.config), rpc = createSecurityRpc(Promise.resolve(f.service), vi.fn())
+  const call = (method: string, value: unknown) => rpc(method, value, new AbortController().signal)
+  await f.service.start(task.id, task.revision)
+  await vi.waitFor(async () => expect((await f.service.state()).runs[0]?.status).toBe('succeeded'))
+  const first = (await f.service.state()).runs[0]!.reportId!
+  expect((await f.service.reportActions(first)).findings[0]).toMatchObject({ id: 'f1', suppressed: false, suppressible: true })
+  expect((await call('suppress', { id: first, findingIds: ['f1'], reason: '' })).ok).toBe(false)
+  expect(await call('suppress', { id: first, findingIds: ['f1'], reason: '只处理常量' })).toEqual({ ok: true, value: { added: 1, existing: 0 } })
+  // The current report reflects the decision immediately, before any rescan.
+  expect((await f.service.reportActions(first)).findings[0]?.suppressed).toBe(true)
+  const listed = await call('suppressions', {})
+  expect(listed.ok && (listed.value as { reason: string }[])[0]?.reason).toBe('只处理常量')
+
+  await f.service.start(task.id, (await f.service.state()).tasks[0]!.revision)
+  await vi.waitFor(async () => expect((await f.service.state()).runs[0]?.reportId).not.toBe(first))
+  await vi.waitFor(async () => expect((await f.service.state()).runs[0]?.status).toBe('succeeded'))
+  const second = (await f.service.state()).runs[0]!
+  expect(second.resultSummary).toMatchObject({ dismissed: 1, pending: 0 })
+  expect(scanner.mock.calls.at(-1)?.[0].suppressions?.items).toHaveLength(1)
+
+  const id = (listed.ok ? listed.value as { id: string }[] : [])[0]!.id
+  expect(await call('unsuppress', { id })).toEqual({ ok: true, value: null })
+  expect((await call('unsuppress', { id })).ok).toBe(false)
+  expect((await f.service.reportActions(first)).findings[0]?.suppressed).toBe(false)
+  expect(JSON.parse(await readFile(join(f.options.root, 'suppressions.json'), 'utf8')).items).toEqual([])
+})

@@ -1,5 +1,6 @@
 import { type Scope } from './repository.js';
 import { type Report } from './report.js';
+import type { Suppression } from './ui-contract.js';
 export interface AuditOptions {
     target: string;
     url?: string;
@@ -22,7 +23,16 @@ export interface AuditOptions {
     view?: 'all' | 'new';
     failOn?: 'none' | 'high' | 'medium';
     signal: AbortSignal;
+    /** The user's saved exclusions. `identity` lets repair worktrees match the original repository. */
+    suppressions?: SuppressionInput;
 }
+export interface SuppressionInput {
+    items: readonly Suppression[];
+    identity?: string;
+    unavailable?: boolean;
+}
+/** An unreadable list must not block scanning; the report says that exclusions were not applied. */
+export declare function loadSuppressions(file: string): Promise<SuppressionInput>;
 export declare function compare(report: Report, baseline: Report, renames?: Record<string, string>): Report;
 export declare function audit(options: AuditOptions): Promise<{
     report: Report;

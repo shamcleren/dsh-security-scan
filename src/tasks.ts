@@ -9,62 +9,23 @@ import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type { ScanSession } from './session.js'
 import type { Toolchains } from './toolchains.js'
 import { randomUUID } from 'node:crypto'
-import { constants } from 'node:fs'
-import { lstat, mkdir, open, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
+import { acquirePidLock } from './lock.js'
 import type { FileHandle } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { z } from 'zod'
 import { runAgentReview, type AgentReviewOptions } from './agent.js'
-import { audit, type AuditOptions } from './workflow.js'
+import { audit, loadSuppressions, type AuditOptions } from './workflow.js'
+import { addSuppressions, readSuppressions, removeSuppression, suppressionFor, SuppressionError } from './suppressions.js'
 import { stageReportDeletion, exitCode, listReports, readReport, renderReport, reportFile, reviewReport, writeReport } from './report.js'
 import { manageHook, AuditQueue } from './hooks.js'
 import { validateRepositoryUrl, inside } from './repository.js'
-import { RepairRequestSchema, type ReportActions, HookRequestSchema, RunSchema, SettingsSchema, TaskConfigSchema, TaskSchema, type Task, type TaskConfig, type Run, type ScanSettings, type UiState, type HookRequest, type ModelCatalog } from './ui-contract.js'
+import { RepairRequestSchema, type ReportActions, HookRequestSchema, RunSchema, SettingsSchema, TaskConfigSchema, TaskSchema, type Task, type TaskConfig, type Run, type ScanSettings, type UiState, type HookRequest, type ModelCatalog, type Suppression } from './ui-contract.js'
 
 export class TaskError extends Error { constructor(readonly code: string) { super(code) } }
-/** Recover only a local, owned PID lock whose process is definitively gone. */
-async function acquireTaskLock(root: string): Promise<FileHandle> {
-  const path = join(root, '.tasks.lock')
-  try { return await open(path, 'wx', 0o600) }
-  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error }
-  // Serialize recovery: two stale readers must never unlink a new owner's lock.
-  // A crash during recovery leaves this guard for explicit ownership inspection.
-  const guardPath = join(root, '.tasks-recovery.lock')
-  let guard: FileHandle
-  try { guard = await open(guardPath, 'wx', 0o600) }
-  catch { throw new TaskError('task-store-locked') }
-  try {
-    await guard.writeFile(String(process.pid) + '\n')
-    let stale: FileHandle
-    try { stale = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK) }
-    catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return await open(path, 'wx', 0o600)
-      throw new TaskError('task-store-locked')
-    }
-    try {
-      const stat = await stale.stat()
-      if (!stat.isFile() || stat.size > 16 || !process.getuid || stat.uid !== process.getuid()) throw new TaskError('task-store-locked')
-      const owner = await stale.readFile('utf8')
-      if (!/^[1-9]\d*\n$/u.test(owner)) throw new TaskError('task-store-locked')
-      const pid = Number(owner.trim())
-      if (!Number.isSafeInteger(pid) || pid > 2147483647) throw new TaskError('task-store-locked')
-      let gone = false
-      try { process.kill(pid, 0) }
-      catch (error) { gone = (error as NodeJS.ErrnoException).code === 'ESRCH' }
-      if (!gone) throw new TaskError('task-store-locked')
-      const current = await lstat(path)
-      if (current.isSymbolicLink() || current.dev !== stat.dev || current.ino !== stat.ino || await readFile(path, 'utf8') !== owner) throw new TaskError('task-store-locked')
-      await rm(path)
-      try { return await open(path, 'wx', 0o600) }
-      catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new TaskError('task-store-locked')
-        throw error
-      }
-    } finally { await stale.close() }
-  } finally { await guard.close(); await rm(guardPath) }
-}
+const acquireTaskLock = (root: string): Promise<FileHandle> => acquirePidLock(join(root, '.tasks.lock'), join(root, '.tasks-recovery.lock'), () => new TaskError('task-store-locked'))
 const StoreSchema = z.object({ owner: z.literal('dsh-security-tasks-v1'), tasks: z.array(TaskSchema).max(100), runs: z.array(RunSchema).max(100) }).strict()
 type Store = z.infer<typeof StoreSchema>
 interface Options {
@@ -92,6 +53,7 @@ export class SecurityTasks {
   private readonly dirtyTasks = new Set<string>()
   private readonly hookControllers = new Set<AbortController>()
   private readonly ownedOperations = new Set<Promise<unknown>>()
+  private suppressionTail: Promise<unknown> = Promise.resolve()
   private readonly queue: AuditQueue
   private constructor(private readonly options: Options, private readonly lock: FileHandle) {
     this.queue = new AuditQueue(async id => {
@@ -271,7 +233,8 @@ export class SecurityTasks {
     }
     const parent = run?.previousReportId && !run.repair ? this.data.runs.find(item => item.reportId === run.previousReportId) : undefined
     const chain = parent ? this.repairOrigin(parent) : undefined
-    return structuredClone({ findings: report.findings.map(findingItem), ...(run ? { run } : {}), ...(chain ? { repairChain: { sessionId: chain.origin.repair!.sessionId, round: chain.round + 1 } } : {}),
+    const saved = suppressionFor(await readSuppressions(this.suppressionFile).catch(() => []), report.source.identity)
+    return structuredClone({ findings: report.findings.map(item => findingItem(item, !!item.suppression || !!saved(item))), ...(run ? { run } : {}), ...(chain ? { repairChain: { sessionId: chain.origin.repair!.sessionId, round: chain.round + 1 } } : {}),
       repairMode: run?.repair?.mode ?? this.data.tasks.find(task => task.id === run?.taskId)?.config.repairMode ?? 'pr', ...(prPreview ? { prPreview } : {}), ...(prError ? { prError } : {}),
       repairable: !!run && run.config.kind === 'local' && !run.config.ref && run.config.scope !== 'staged' && report.source.revision === 'working-tree' && !active(run),
       ...(comparison ? { comparison } : {}) })
@@ -414,6 +377,8 @@ export class SecurityTasks {
           ...(config.kind === 'remote' ? { url: config.target } : {}), ...(config.ref ? { ref: config.ref } : {}),
           ...(config.baseline === 'git' ? { base: config.base } : {}), ...(config.baseline === 'report' ? { baseline: this.reportLocation(config.baselineId) } : {}),
           ...(config.dynamicUrl && config.dynamicAuthorized ? { dynamicUrl: config.dynamicUrl } : {}),
+          // Repair worktrees are rewritten to the original repository identity below, so match against it too.
+          suppressions: { ...await loadSuppressions(this.suppressionFile), ...(next.repairSource ? { identity: next.repairSource.sourceIdentity } : {}) },
           onProgress: async phase => { await this.mutate(() => { const run = this.data.runs.find(run => run.id === id)!; run.phase = phase }); await this.publishSession(id) } }
         let result: Awaited<ReturnType<typeof audit>> | undefined, rulesAttempted = false
         const prepare = async (): Promise<string> => {
@@ -511,6 +476,29 @@ export class SecurityTasks {
     })
     if (id === this.runningId) this.abort?.abort()
     await this.publishSession(id)
+  }
+  private get suppressionFile(): string { return join(this.options.root, 'suppressions.json') }
+  /** Serialize this process's writers; the file lock covers CLI and hook writers. */
+  private suppressionWrite<T>(operation: () => Promise<T>): Promise<T> {
+    this.assertOpen()
+    const task = this.suppressionTail.then(async () => {
+      this.assertOpen()
+      try { return await operation() }
+      catch (error) { throw error instanceof SuppressionError ? new TaskError(error.code) : error }
+    })
+    const owned = task.finally(() => { this.ownedOperations.delete(owned) })
+    this.ownedOperations.add(owned)
+    this.suppressionTail = owned.catch(() => {})
+    return task
+  }
+  async suppress(reportId: string, findingIds: string[], reason: string): Promise<{ added: number; existing: number }> {
+    z.string().uuid().parse(reportId)
+    return this.suppressionWrite(async () => addSuppressions(this.suppressionFile, await readReport(this.reportLocation(reportId)), findingIds, reason))
+  }
+  unsuppress(id: string): Promise<void> { return this.suppressionWrite(() => removeSuppression(this.suppressionFile, id)) }
+  async suppressions(): Promise<Suppression[]> {
+    try { return (await readSuppressions(this.suppressionFile)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)) }
+    catch (error) { throw error instanceof SuppressionError ? new TaskError(error.code) : error }
   }
   private reportLocation(id: string): string {
     const run = this.data.runs.find(run => run.reportId === id || run.rulesReportId === id)

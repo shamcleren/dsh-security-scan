@@ -3,7 +3,7 @@ import type { Toolchains } from './toolchains.js';
 import { type AgentReviewOptions } from './agent.js';
 import { audit } from './workflow.js';
 import { manageHook } from './hooks.js';
-import { type ReportActions, type Task, type TaskConfig, type Run, type ScanSettings, type UiState, type HookRequest, type ModelCatalog } from './ui-contract.js';
+import { type ReportActions, type Task, type TaskConfig, type Run, type ScanSettings, type UiState, type HookRequest, type ModelCatalog, type Suppression } from './ui-contract.js';
 export declare class TaskError extends Error {
     readonly code: string;
     constructor(code: string);
@@ -39,6 +39,7 @@ export declare class SecurityTasks {
     private readonly dirtyTasks;
     private readonly hookControllers;
     private readonly ownedOperations;
+    private suppressionTail;
     private readonly queue;
     private constructor();
     static open(options: Options): Promise<SecurityTasks>;
@@ -74,6 +75,15 @@ export declare class SecurityTasks {
     private drain;
     private publishSession;
     cancel(id: string, reason?: 'cancelled' | 'host-restarted'): Promise<void>;
+    private get suppressionFile();
+    /** Serialize this process's writers; the file lock covers CLI and hook writers. */
+    private suppressionWrite;
+    suppress(reportId: string, findingIds: string[], reason: string): Promise<{
+        added: number;
+        existing: number;
+    }>;
+    unsuppress(id: string): Promise<void>;
+    suppressions(): Promise<Suppression[]>;
     private reportLocation;
     report(id: string, format: 'html' | 'json'): Promise<string>;
     source(id: string, file: string, line: number, signal: AbortSignal): Promise<{

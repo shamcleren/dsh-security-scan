@@ -20,7 +20,7 @@
 
 需要官方 DSH **0.2.1-rc.5**。插件只用公开扩展点，不改 DSH 源码，也不依赖其他插件或自定义应用壳。兼容范围以 `package.json` 的 `engines.dsh` 为准，其他版本（包括 0.2.2 预发布版）尚未验证。
 
-推荐安装 [GitHub Releases](https://github.com/shamcleren/dsh-security-scan/releases) 里的发布包。把 `<版本>` 换成要安装的版本号（如 `0.16.1`）：
+推荐安装 [GitHub Releases](https://github.com/shamcleren/dsh-security-scan/releases) 里的发布包。把 `<版本>` 换成要安装的版本号（如 `0.17.0`）：
 
 ```sh
 dsh plugin --profile web add https://github.com/shamcleren/dsh-security-scan/releases/download/v<版本>/shamcleren-dsh-security-scan-<版本>.tgz
@@ -128,7 +128,15 @@ dsh-security scan --target /absolute/path/project --output /absolute/path/report
 
 如需提前准备，运行 `dsh-security setup`。已有扫描器可在高级设置填写绝对路径，留空恢复插件管理；CLI 仍支持 `--semgrep /absolute/path/semgrep` 和 `--gitleaks /absolute/path/gitleaks` 覆盖。自定义工具仍需满足上述验证版本。
 
-Semgrep 只用包内 12 类基础规则，关闭规则联网、指标和版本检查。不是商业跨文件分析的替代品。规则包括 shell、动态代码、反序列化、TLS、SQL 和 HTML sink；模型补充权限、租户隔离、SSRF 等业务风险。
+Semgrep 只用包内 29 条规则，关闭规则联网、指标和版本检查。不是商业跨文件分析的替代品。
+
+| 语言 / 框架 | 覆盖 |
+| --- | --- |
+| Python：Flask、Django / DRF、Jinja2、requests / httpx、PyJWT | Shell、eval/exec、pickle/YAML 反序列化、关闭 TLS 校验、SQL 拼接（f-string / % / format / +）、模板源码拼接、`mark_safe` / `Markup`、`debug=True`、JWT 不验签、SSRF、路径穿越、开放跳转 |
+| JavaScript / TypeScript：Express、Koa、Next.js 路由、React、pg / mysql / knex.raw / Prisma raw | Shell、eval / `new Function` / `vm`、关闭 TLS 校验、`innerHTML` / `dangerouslySetInnerHTML` 等 HTML sink、SQL 拼接、SSRF、开放跳转、路径穿越、反射任意来源的带凭据 CORS |
+| Go：net/http、gorilla/mux、Gin、Echo、database/sql、GORM、html/template | `sh -c`、关闭 TLS 校验、SQL 拼接 / `Sprintf`、路径穿越、开放跳转、SSRF、`template.HTML` 等绕过转义 |
+
+SSRF、路径穿越和开放跳转使用函数内污点追踪：只有请求参数（`request.args`、`req.query`、`r.URL.Query()`、`c.Query()` 等）到达敏感调用时才报告；固定域名前缀、常量表查找、`basename` / `secure_filename` / `filepath.IsLocal` 等常见防护视为已处理。纯字符串字面量的 shell、eval、HTML 和 SQL 不再报告。规则不跨函数或文件追踪，也不解析常量变量的值；权限、租户隔离等业务风险由 AI 复核补充。规则源码在 `scripts/build-rules.mjs`，执行后生成 `rules/baseline.yml`；测试会检查两者一致。
 
 可选密钥检测使用自动准备的 Gitleaks：
 
@@ -299,9 +307,26 @@ PR 创建通过会话中实际可用且已授权的平台工具完成，插件�
 
 本地模式在扫描目录直接修改，要求保留已有改动，不自动提交、推送或创建 PR。两种模式都只处理选中项，先核实当前源码并说明验证结果；沿用默认模型、会话配置和原生工具权限。每份报告仍关联一个修复会话，重试复用请求身份、分支和工作区；已发起后不更换选中项或交付模式。旧版已存在的修复记录继续按本地模式处理。修复工作区不会因关闭插件、删除报告或完成会话而自动删除，避免丢失未提交或未推送内容。
 
+### 标记误报并在后续扫描中隐藏
+
+在“接下来，处理扫描结果”中选中问题，点击“标记为误报”并填写原因（必填，最多 500 字）。之后的扫描在同一仓库、同一引擎、同一规则、同一文件且代码指纹一致时，自动将其标为“已排除”并默认隐藏：不计入失败阈值和 CLI 退出码，不进入 SARIF，也不交给 AI 复核。行号移动不影响匹配；命中代码被修改、文件改名或换了仓库时会重新显示，避免一次排除掩盖后来引入的风险。报告保留记录并注明你在哪天、以什么原因排除，在筛选中选“全部”即可查看。排除后当前报告的可处理列表立即更新，不必重新扫描。
+
+排除记录只保存在本机 `security-scan/suppressions.json`（与报告目录同级），不写入被扫描的仓库，最多 5000 条。在「扫描设置 → 已排除的问题」中可以搜索并“恢复”，恢复后下一次扫描重新显示。AI 补充的发现没有跨运行的稳定指纹，不能排除；已排除的问题也不能再提交复核结论。文件为符号链接、格式损坏或正被其他进程写入时，扫描照常完成并在报告中说明排除记录未生效，不会覆盖该文件。
+
+CLI 和 Git hook 默认使用同一份列表：
+
+```sh
+dsh-security suppress --action list
+dsh-security suppress --action add --report /path/report.json --finding ID1,ID2 --reason "参数来自内部常量"
+dsh-security suppress --action remove --id SUPPRESSION_ID
+# 指定其他列表，或本次扫描忽略排除记录
+dsh-security scan --target /path/project --suppressions /path/suppressions.json
+dsh-security scan --target /path/project --ignore-suppressions
+```
+
 只有关联了运行记录的本地工作区报告提供修复入口；远端仓库、固定 ref 和暂存区报告需先在本地工作区扫描。
 
-修复会话按五步闭环执行：逐项核实、最小修复、回归验证、复扫确认、总结。提示中附带按类别整理的修复要点（命令注入、SQL 注入、XSS、动态执行、反序列化、TLS 校验、依赖升级、凭据处理、运行时配置）。修复和测试完成后，会话调用 `dsh_security_scan_repair_rescan`，按原配置排队一次复扫；重复调用不会排第二次，扫描结束后对比结果会回到同一会话。复扫报告的“接下来”面板显示 选择问题 → 会话修复 → 复扫验证 → 对比结果 的当前进度；仍然存在或新增的问题可以点击“继续修复剩余问题 · 第 N 轮”发回同一会话，只包含原选中问题（按稳定指纹匹配）和新增问题，每轮最多 20 项。没有剩余问题时会明确提示。
+修复会话按五步闭环执行：逐项核实、最小修复、回归验证、复扫确认、总结。提示中附带按类别整理的修复要点（命令注入、SQL 注入、XSS、动态执行、反序列化、TLS 校验、路径穿越、SSRF、开放跳转、模板注入、调试模式、JWT、CORS、依赖升级、凭据处理、运行时配置）。修复和测试完成后，会话调用 `dsh_security_scan_repair_rescan`，按原配置排队一次复扫；重复调用不会排第二次，扫描结束后对比结果会回到同一会话。复扫报告的“接下来”面板显示 选择问题 → 会话修复 → 复扫验证 → 对比结果 的当前进度；仍然存在或新增的问题可以点击“继续修复剩余问题 · 第 N 轮”发回同一会话，只包含原选中问题（按稳定指纹匹配）和新增问题，每轮最多 20 项。没有剩余问题时会明确提示。
 
 也可以回到原报告手动点击“按原配置复扫”。本地模式复扫使用历史运行保存的完整任务配置，包括原目标、scope、ref、Git/报告基线及模型策略；默认会话模式通过“复扫修复分支”扫描已记录的独立工作区，保留原 scope、基线及模型策略，并关联已回填的 PR 链接。工作区丢失或分支变更会拒绝复扫；编辑或删除任务定义不会改变复扫配置。工具路径与报告保存目录使用当前设置。扫描运行记录标记为“复扫”，完成后可查看两份报告的对比；原报告不被修改。
 
@@ -309,7 +334,7 @@ PR 创建通过会话中实际可用且已授权的平台工具完成，插件�
 
 运行中的复扫会保护原报告，防止删除；结束后可以显式删除原报告，这会同时移除该项对比关联。修复会话由 DSH Host 管理，关闭工作台不会取消会话。要停止修复请在原生会话中取消。运行记录依旧遵守 100 条保留上限，删除记录会失去该报告的后续动作配置；独立导出的 HTML 保持离线只读。
 
-UI 回归使用隔离示例，不读取真实仓库或调用模型：在组件目录执行 `pnpm test:ui`，需要 Playwright 和 Chromium。可通过 `PLAYWRIGHT_MODULE` 指定 Playwright 模块入口，`CHROMIUM_EXECUTABLE` 指定测试浏览器，`UI_SCREENSHOT` 指定截图路径。脚本会校验草稿保护、键盘焦点、重复提交、重连、修复选择、快捷选择、运行时检查授权、继续修复、复扫、筛选和窄屏布局。
+UI 回归使用隔离示例，不读取真实仓库或调用模型：在组件目录执行 `pnpm test:ui`，需要 Playwright 和 Chromium。可通过 `PLAYWRIGHT_MODULE` 指定 Playwright 模块入口，`CHROMIUM_EXECUTABLE` 指定测试浏览器，`UI_SCREENSHOT` 指定截图路径。脚本会校验草稿保护、键盘焦点、重复提交、重连、修复选择、快捷选择、运行时检查授权、继续修复、复扫、筛选、标记误报与恢复和窄屏布局。
 
 ## 0.15 工具命名迁移
 
@@ -331,7 +356,7 @@ UI 回归使用隔离示例，不读取真实仓库或调用模型：在组件�
 
 ## 可复现效果评测
 
-见 [评测说明](evaluation/README.md) 和随包发布的 [完整基线](evaluation/baseline.json)。42 个原创合成样例涵盖四种语言：20 个带风险样例、22 个安全样例；同时包含漏洞/修复对、可信常量/净化后的代码，以及基础规则未覆盖的业务漏洞。固定 Semgrep CE 1.176.1 三次真实运行得到：TP 16、FN 4、FP 6、TN 16；候选精确率 72.7%、召回率 80.0%、F1 76.2%。这是一套小型公开合成集上的候选指标，不能作为真实项目漏洞检出率，也未测量 AI 复核效果。
+见 [评测说明](evaluation/README.md) 和随包发布的 [完整基线](evaluation/baseline.json)。97 个原创合成样例涵盖四种语言和上述框架：46 个带风险样例、51 个安全样例；包含每条规则的漏洞/修复对、常量/净化/白名单等难例，以及规则未覆盖的授权、越权和跨函数 SSRF。固定 Semgrep CE 1.176.1 三次真实运行得到：TP 41、FN 5、FP 2、TN 49；候选精确率 95.3%、召回率 89.1%、F1 92.1%。新样例是与新规则同时编写的，指标天然偏乐观；原有 42 个样例在新规则下为 TP 19、FN 1、FP 0、TN 22。这是一套小型公开合成集上的候选指标，不能作为真实项目漏洞检出率，也未测量 AI 复核效果。
 
 ```sh
 dsh-security evaluate --runs 3 --output /tmp/security-evaluation-new.json

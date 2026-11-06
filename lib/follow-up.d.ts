@@ -1,7 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis';
 import type { Finding, Report } from './report.js';
 import type { ReportActions, Run } from './ui-contract.js';
-export declare const findingItem: ({ id, title, file, line, severity, status, engine, endpoint }: Finding) => {
+export declare const findingItem: ({ id, title, file, line, severity, status, engine, endpoint, suppression }: Finding, suppressed?: boolean) => {
     endpoint?: string;
     id: string;
     title: string;
@@ -9,6 +9,8 @@ export declare const findingItem: ({ id, title, file, line, severity, status, en
     line: number;
     severity: "high" | "medium" | "critical" | "low" | "info";
     status: "confirmed" | "needs-review" | "dismissed";
+    suppressed: boolean;
+    suppressible: boolean;
     category: "sourceRisk" | "dependencyRisk" | "secretRisk" | "dynamicRisk";
 };
 /** Absence is meaningful only with equivalent engines, policy and covered scope. AI IDs are per-run. */

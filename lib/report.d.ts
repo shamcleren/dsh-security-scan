@@ -78,8 +78,13 @@ export declare const FindingSchema: z.ZodObject<{
         metadataAvailable: z.ZodBoolean;
         locationExact: z.ZodBoolean;
     }, z.core.$strict>>;
+    suppression: z.ZodOptional<z.ZodObject<{
+        id: z.ZodString;
+        reason: z.ZodString;
+        createdAt: z.ZodString;
+    }, z.core.$strict>>;
 }, z.core.$strict>;
-export declare const PLUGIN_VERSION: "0.16.1";
+export declare const PLUGIN_VERSION: "0.17.0";
 export declare const ReportSchema: z.ZodObject<{
     schemaVersion: z.ZodLiteral<1>;
     pluginVersion: z.ZodString;
@@ -191,6 +196,11 @@ export declare const ReportSchema: z.ZodObject<{
             metadataAvailable: z.ZodBoolean;
             locationExact: z.ZodBoolean;
         }, z.core.$strict>>;
+        suppression: z.ZodOptional<z.ZodObject<{
+            id: z.ZodString;
+            reason: z.ZodString;
+            createdAt: z.ZodString;
+        }, z.core.$strict>>;
     }, z.core.$strict>>;
     baseline: z.ZodOptional<z.ZodObject<{
         id: z.ZodString;
@@ -247,6 +257,11 @@ export declare const ReportSchema: z.ZodObject<{
                 references: z.ZodArray<z.ZodString>;
                 metadataAvailable: z.ZodBoolean;
                 locationExact: z.ZodBoolean;
+            }, z.core.$strict>>;
+            suppression: z.ZodOptional<z.ZodObject<{
+                id: z.ZodString;
+                reason: z.ZodString;
+                createdAt: z.ZodString;
             }, z.core.$strict>>;
         }, z.core.$strict>>;
     }, z.core.$strip>>;

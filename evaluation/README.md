@@ -14,7 +14,7 @@ The command accepts only Semgrep CE **1.176.1**. A preinstalled scanner avoids t
 
 ## Labels and scoring
 
-`manifest.json` records each file's language, relevant CWE, label and assumptions. There are 16 vulnerable/fixed pairs spanning all 12 rule families and four languages, six harder safe cases (trusted literals or sanitized HTML), and four vulnerable cases outside the basic rules (authorization, traversal, JS SQL injection, SSRF). These known blind spots remain in the denominator.
+`manifest.json` records each file's language, relevant CWE, label and assumptions. There are 97 cases: 46 vulnerable and 51 safe. Every one of the 29 bundled rules has at least one vulnerable fixture it must detect, and most have a paired fixed version. Framework cases cover Flask, Django, Jinja2, Express, Koa, Next.js route handlers, React (`.jsx` / `.tsx`), net/http, Gin, html/template, database/sql and GORM. Hard negatives include trusted literals, module constants, sanitized HTML, bound SQL parameters, allow-list maps, fixed-origin requests, root-boundary path checks and Django's redirect host check. Known misses stay in the denominator: missing authorization (Python, TypeScript, Go), a Django IDOR, and SSRF that crosses a helper function.
 
 - TP: a vulnerable file has at least one candidate for its labelled CWE.
 - FN: a vulnerable file lacks a candidate for that CWE, including an unrelated candidate.
@@ -27,9 +27,11 @@ Each file is counted once; repeated candidates do not inflate TP. Precision = TP
 
 ## Recorded result
 
-On macOS arm64 / Node 26.7.0, three actual runs produced the same outcomes: **TP 16, FN 4, FP 6, TN 16**, precision **72.7%**, recall **80.0%**, F1 **76.2%**. End-to-end samples including scanner startup were **2363 / 1855 / 1845 ms**, median **1855 ms**. See `baseline.json` for the complete machine-readable result.
+On macOS arm64 / Node 26.7.0 with plugin 0.17.0, three actual runs produced the same outcomes: **TP 41, FN 5, FP 2, TN 49**, precision **95.3%**, recall **89.1%**, F1 **92.1%**. End-to-end samples including scanner startup were **1762 / 1629 / 1596 ms**, median **1629 ms**. See `baseline.json` for the complete machine-readable result.
 
-The misses are the four business/context cases. False alarms are the six trusted/sanitized examples. This is expected of broad sink rules and gives concrete targets for future improvements; it does not establish the quality of any optional AI review. No rules were weakened or cases removed to improve these numbers.
+The five misses are the authorization, IDOR and cross-function SSRF cases, which need call-graph or business context. The two false alarms are an HTML constant defined in a module variable (the rule does not resolve constant values) and an SSRF guarded by a parsed-hostname allow list (the taint rule does not model the check). These numbers say nothing about the quality of optional AI review.
+
+0.17.0 changed the rules and the corpus together, so the previous baseline was replaced after reviewing every case instead of being compared. The 42 cases from 0.16 went from TP 16 / FN 4 / FP 6 / TN 16 to **TP 19 / FN 1 / FP 0 / TN 22**: new taint rules detect the earlier JS SQL injection, TypeScript SSRF and Go traversal misses, and literal-only arguments to shell, eval and HTML sinks are no longer reported. That literal exclusion is a deliberate rule change: a fixed string such as `subprocess.run("printf safe", shell=True)` cannot carry external input. It also means a sink fed through a constant variable is still reported. The 55 new cases were written by the same author at the same time as the new rules, so their 22 TP / 4 FN / 2 FP / 27 TN result is optimistic and not an independent measurement. No case was removed and the known misses stay in the denominator.
 
 ## Limits and contribution
 

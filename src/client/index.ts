@@ -4,7 +4,8 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { createElement, useSyncExternalStore } from 'react'
 import { Workbench, type WorkbenchDraft } from './Workbench.js'
 import { en, zh, type LocaleKey } from './locales.js'
-import { SECURITY_CHANNEL, ReportActionsSchema, ModelCatalogSchema, UiStateSchema, type UiRemote } from '../ui-contract.js'
+import { SECURITY_CHANNEL, ReportActionsSchema, ModelCatalogSchema, SuppressionSchema, UiStateSchema, type UiRemote } from '../ui-contract.js'
+import { z } from 'zod'
 interface ClientContext {
   uiWorkspace?: Pick<UiWorkspace, 'openSession'>
   layout: Pick<ILayout, 'selectPanel'>
@@ -46,6 +47,9 @@ export function apply(ctx: ClientContext): void {
     cancel: id => call('cancel', { id }), settings: value => call('settings', value), hook: request => call('hook', request),
     source: (id, file, line) => call('source', { id, file, line }),
     report: (id, format) => call('report', { id, format }),
+    suppress: (id, findingIds, reason) => call('suppress', { id, findingIds, reason }),
+    suppressions: async () => z.array(SuppressionSchema).parse(await call('suppressions')),
+    unsuppress: id => call('unsuppress', { id }),
   }
   let requestedReport: string | undefined
   const draft: WorkbenchDraft = {}

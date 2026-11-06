@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { expect, it, vi } from 'vitest'
 import { evaluate, evaluationRegressions, scoreCases } from '../src/evaluation.js'
+import { RULES } from '../src/rules.js'
 
 const cases = [
   { id: 'detected', file: 'detected.py', label: 'vulnerable' as const }, { id: 'missed', file: 'missed.py', label: 'vulnerable' as const },
@@ -34,7 +35,12 @@ it('runs the published corpus through real Semgrep and preserves its measured ba
   try {
     const result = await evaluate({ semgrepPath: process.env.SECURITY_TEST_SEMGREP!, signal: new AbortController().signal, runs: 1, baseline })
     expect(result.regressions).toEqual([])
-    expect(result.summary.cases).toBe(42)
+    expect(result.summary.cases).toBe(97)
+    // Every bundled rule has at least one labelled vulnerable fixture that it detects.
+    expect(new Set(result.cases.filter(item => item.label === 'vulnerable' && item.matchedCwe).flatMap(item => item.rules))).toEqual(new Set(Object.keys(RULES)))
+    // Known misses (authorization, cross-function SSRF) and unmodelled guards stay in the denominator.
+    expect(result.cases.filter(item => item.label === 'vulnerable' && !item.matchedCwe).map(item => item.id).sort()).toEqual(['go-missing-authorization', 'python-django-idor', 'python-missing-authorization', 'python-ssrf-helper', 'ts-missing-authorization'])
+    expect(result.cases.filter(item => item.label === 'safe' && item.found).map(item => item.id).sort()).toEqual(['js-ssrf-host-allowlist', 'ts-constant-html'])
     expect(result.summary.fn).toBeGreaterThan(0)
     expect(result.summary.fp).toBeGreaterThan(0)
     expect(result.model).toEqual({ enabled: false, requests: 0, tokens: 0 })

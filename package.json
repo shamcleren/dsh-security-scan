@@ -1,6 +1,6 @@
 {
   "name": "@shamcleren/dsh-security-scan",
-  "version": "0.16.1",
+  "version": "0.17.0",
   "description": "DSH plugin: local Python, Go and JavaScript/TypeScript security scanning with offline reports, an optional runtime baseline and evidence-based AI review",
   "keywords": [
     "dsh-plugin",

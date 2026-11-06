@@ -91,7 +91,7 @@ it('renders runtime findings at their endpoint and exports them to SARIF without
   const { Script } = await import('node:vm')
   const runtime: Finding = { id: 'http-csp', rule: 'dynamic.header-csp', fingerprint: 'http-csp', engine: 'http', file: 'http/127.0.0.1:3000', line: 1, title: '页面未设置 Content-Security-Policy', cwe: 'CWE-693', severity: 'low', status: 'needs-review', change: 'unknown', evidence: 'HTML 响应未返回 Content-Security-Policy。', recommendation: '设置 CSP', verification: '只读 GET', endpoint: { url: 'http://127.0.0.1:3000/', method: 'GET', status: 200 } }
   const report: import('../src/report.js').Report = {
-    schemaVersion: 1, pluginVersion: '0.16.1', id: '12345678-1234-4234-8234-123456789abc', createdAt: '2026-11-06T00:00:00.000Z',
+    schemaVersion: 1, pluginVersion: '0.17.0', id: '12345678-1234-4234-8234-123456789abc', createdAt: '2026-11-06T00:00:00.000Z',
     source: { identity: 'test', label: '/repo', revision: 'working-tree', scope: 'full', digest: 'test', files: {}, changed: [], skipped: 0 },
     policy: { engine: 'auto', rulesDigest: 'test', dependencies: false, secrets: false, view: 'all', failOn: 'none', dynamic: 'http://127.0.0.1:3000/' },
     engines: [{ name: 'http', version: 'baseline-v1', status: 'completed', detail: '只读运行时基线检查' }], coverage: { files: 0, scannedFiles: 0, omittedFindings: 0, detail: '' }, findings: [runtime], reviews: [], notes: [],

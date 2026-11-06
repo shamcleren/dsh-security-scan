@@ -10,6 +10,7 @@ type Props = {
     openSession(id: string): void;
     showRuns(): void;
     openReport(id: string): void;
+    notify?(message: string): void;
 };
-export declare function ReportFollowUp({ id, remote, t, busy, runs, action, openSession, showRuns, openReport }: Props): import("react").JSX.Element;
+export declare function ReportFollowUp({ id, remote, t, busy, runs, action, openSession, showRuns, openReport, notify }: Props): import("react").JSX.Element;
 export {};

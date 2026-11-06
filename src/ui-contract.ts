@@ -77,7 +77,19 @@ export const UiStateSchema = z.object({ tasks: z.array(TaskSchema), runs: z.arra
 export type UiState = z.infer<typeof UiStateSchema>
 export const HookRequestSchema = z.object({ taskId: z.string().uuid(), revision: z.number().int().positive(), event: z.enum(['pre-commit', 'pre-push']), action: z.enum(['install', 'remove']), enforce: z.boolean(), base: shortText.default(''), confirm: z.literal(true) }).strict()
 export type HookRequest = z.infer<typeof HookRequestSchema>
-export const FindingItemSchema = z.object({ category: z.enum(['sourceRisk', 'dependencyRisk', 'secretRisk', 'dynamicRisk']).default('sourceRisk'), id: z.string(), title: z.string(), file: z.string(), line: z.number(), severity: z.enum(['critical', 'high', 'medium', 'low', 'info']), status: z.enum(['confirmed', 'needs-review', 'dismissed']), endpoint: z.string().optional() })
+/** A user's decision that one finding is a false positive in one repository. Matching uses stable scanner identity, never report IDs. */
+export const SuppressionSchema = z.object({
+  id: z.string().uuid(), sourceIdentity: z.string().min(1).max(2000), sourceLabel: z.string().max(2000),
+  engine: z.string().min(1).max(100), rule: z.string().min(1).max(200), file: z.string().max(2000), fingerprint: z.string().min(1).max(200),
+  title: z.string().max(500), reason: z.string().trim().min(1).max(500), createdAt: z.string().datetime(), reportId: z.string().uuid(),
+}).strict()
+export type Suppression = z.infer<typeof SuppressionSchema>
+export const SuppressRequestSchema = z.object({ id: z.string().uuid(), findingIds: z.array(z.string().min(1).max(200)).min(1).max(100), reason: z.string().trim().min(1).max(500) }).strict()
+export const FindingItemSchema = z.object({ category: z.enum(['sourceRisk', 'dependencyRisk', 'secretRisk', 'dynamicRisk']).default('sourceRisk'), id: z.string(), title: z.string(), file: z.string(), line: z.number(), severity: z.enum(['critical', 'high', 'medium', 'low', 'info']), status: z.enum(['confirmed', 'needs-review', 'dismissed']), endpoint: z.string().optional(),
+  /** Excluded by the user, either when this report was written or afterwards. */
+  suppressed: z.boolean().default(false),
+  /** AI-only findings have no stable fingerprint across scans, so they cannot be excluded. */
+  suppressible: z.boolean().default(false) })
 export const ReportActionsSchema = z.object({
   findings: z.array(FindingItemSchema), run: RunSchema.optional(), repairable: z.boolean(),
   repairMode: RepairModeSchema.default('pr'), prPreview: z.object({ repositoryUrl: shortText, base: shortText, commit: shortText, revision: z.string().regex(/^[a-f0-9]{64}$/) }).optional(), prError: shortText.optional(),
@@ -105,5 +117,8 @@ export type UiRemote = {
   hook(request: HookRequest): Promise<void>
   source(id: string, file: string, line: number): Promise<{ content: string }>
   report(id: string, format: 'html' | 'json'): Promise<string>
+  suppress(id: string, findingIds: string[], reason: string): Promise<{ added: number; existing: number }>
+  suppressions(): Promise<Suppression[]>
+  unsuppress(id: string): Promise<void>
 }
 export const newTask = (): TaskConfig => ({ name: '', kind: 'local', target: '', ref: '', scope: 'full', baseline: 'none', base: '', baselineId: '', engine: 'auto', dependencies: true, secrets: true, view: 'all', autoScan: false, syncSession: true, repairMode: 'pr', dynamicUrl: '', dynamicAuthorized: false, agent: AgentPolicySchema.parse({ enabled: true }) })

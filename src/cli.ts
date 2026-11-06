@@ -4,7 +4,8 @@ import { readFile, writeFile, realpath } from 'node:fs/promises'
 import { resolve, dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { z } from 'zod'
-import { audit } from './workflow.js'
+import { audit, loadSuppressions } from './workflow.js'
+import { addSuppressions, defaultSuppressionsFile, readSuppressions, removeSuppression } from './suppressions.js'
 import { defaultReportsRoot, listReports, exitCode, readReport, renderReport, reviewReport, ReviewSchema, sarif } from './report.js'
 import { manageHook } from './hooks.js'
 import { evaluate } from './evaluation.js'
@@ -12,9 +13,10 @@ import { dynamicTarget } from './ui-contract.js'
 
 export async function main(argv: string[]): Promise<number> {
   const [command = 'help', ...rest] = argv, flags = new Map<string, string>()
-  const booleans = new Set(['--dependencies', '--secrets', '--enforce'])
+  const booleans = new Set(['--dependencies', '--secrets', '--enforce', '--ignore-suppressions'])
   const commandFlags: Record<string, string[]> = {
-    scan: ['target', 'url', 'ref', 'scope', 'base', 'baseline', 'output', 'engine', 'semgrep', 'gitleaks', 'view', 'fail-on', 'dependencies', 'secrets', 'dynamic'],
+    scan: ['target', 'url', 'ref', 'scope', 'base', 'baseline', 'output', 'engine', 'semgrep', 'gitleaks', 'view', 'fail-on', 'dependencies', 'secrets', 'dynamic', 'suppressions', 'ignore-suppressions'],
+    suppress: ['action', 'report', 'finding', 'reason', 'id', 'suppressions'],
     list: ['output', 'target'], render: ['report', 'output', 'format'], review: ['report', 'reviews', 'output'], check: ['report', 'fail-on'],
     setup: [], evaluate: ['semgrep', 'output', 'baseline', 'runs'],
     hook: ['target', 'action', 'event', 'output', 'semgrep', 'enforce', 'base'], help: [], '--help': [],
@@ -58,10 +60,20 @@ export async function main(argv: string[]): Promise<number> {
         dependencies: flags.has('--dependencies'), secrets: flags.has('--secrets'), output: resolve(get('output', defaultReportsRoot())!),
         // Passing --dynamic is the operator's explicit authorization for the read-only runtime baseline.
         ...(get('dynamic') ? { dynamicUrl: dynamicTarget(get('dynamic')!).href } : {}) }
+      if (flags.has('--ignore-suppressions') && flags.has('--suppressions')) throw new Error('Choose either --suppressions or --ignore-suppressions')
       const paths = await toolchains.resolve(get('semgrep'), get('gitleaks'), controller.signal, { semgrep: engine !== 'inventory', gitleaks: flags.has('--secrets') })
-      const result = await audit({ ...options, ...paths, ...Object.fromEntries(['url', 'ref', 'base', 'baseline'].flatMap(key => get(key) ? [[key, get(key)!]] : [])) })
+      // Exclusions saved in DSH or by `suppress add` apply by default, so hooks and CI see the same results.
+      const suppressions = flags.has('--ignore-suppressions') ? undefined : await loadSuppressions(resolve(get('suppressions', defaultSuppressionsFile())!))
+      const result = await audit({ ...options, ...paths, ...(suppressions ? { suppressions } : {}), ...Object.fromEntries(['url', 'ref', 'base', 'baseline'].flatMap(key => get(key) ? [[key, get(key)!]] : [])) })
       console.log('HTML: ' + result.html + '\nJSON: ' + result.json + '\nFindings: ' + result.report.findings.length)
       return exitCode(result.report)
+    }
+    if (command === 'suppress') {
+      const file = resolve(get('suppressions', defaultSuppressionsFile())!), action = z.enum(['list', 'add', 'remove']).parse(get('action', 'list'))
+      if (action === 'list') { console.log(JSON.stringify(await readSuppressions(file), null, 2)); return 0 }
+      if (action === 'remove') { await removeSuppression(file, required('id')); console.log('Removed: ' + get('id')); return 0 }
+      const result = await addSuppressions(file, await readReport(resolve(required('report'))), required('finding').split(',').map(value => value.trim()).filter(Boolean), required('reason'))
+      console.log(JSON.stringify({ ...result, file })); return 0
     }
     if (command === 'list') {
       console.log(JSON.stringify(await listReports(resolve(get('output', defaultReportsRoot())!), get('target') ? resolve(get('target')!) : undefined), null, 2)); return 0
@@ -90,7 +102,7 @@ export async function main(argv: string[]): Promise<number> {
         ...(get('base') ? { base: get('base')! } : {}) })); return 0
     }
     if (command !== 'help' && command !== '--help') throw new Error('Unknown command: ' + command)
-    console.log('dsh-security evaluate [--semgrep PATH] [--runs 1..10] [--output NEW_JSON] [--baseline BASELINE_JSON]\ndsh-security setup\ndsh-security scan [--target PATH | --url HTTPS_OR_SSH_URL] [--ref REF] [--scope full|diff|staged] [--base REF | --baseline REPORT_JSON]\n  [--view all|new] [--semgrep PATH] [--secrets --gitleaks PATH] [--dependencies] [--dynamic http(s)://YOUR-SERVICE] [--output REPORTS_DIR] [--fail-on none|high|medium]\ndsh-security list [--target PATH] [--output REPORTS_DIR]\ndsh-security check --report REPORT_JSON [--fail-on high|medium|none]\ndsh-security render --report REPORT_JSON --output NEW_HTML [--format html|sarif]\ndsh-security review --report REPORT_JSON --reviews REVIEWS_JSON [--output REPORTS_DIR]\ndsh-security hook --target PATH --action install|remove --event pre-commit|pre-push [--base REF] [--enforce]\nExit: 0 complete, 1 policy exceeded or evaluation regressed, 2 incomplete/unavailable/error. CLI runs rules only; DSH dsh-security-review performs model review. --dependencies sends package names and versions to OSV. --dynamic sends at most 12 read-only same-origin GET requests to a service you own.')
+    console.log('dsh-security evaluate [--semgrep PATH] [--runs 1..10] [--output NEW_JSON] [--baseline BASELINE_JSON]\ndsh-security setup\ndsh-security scan [--target PATH | --url HTTPS_OR_SSH_URL] [--ref REF] [--scope full|diff|staged] [--base REF | --baseline REPORT_JSON]\n  [--view all|new] [--semgrep PATH] [--secrets --gitleaks PATH] [--dependencies] [--dynamic http(s)://YOUR-SERVICE] [--output REPORTS_DIR] [--fail-on none|high|medium]\n  [--suppressions FILE | --ignore-suppressions]\ndsh-security suppress [--action list|add|remove] [--report REPORT_JSON --finding ID[,ID] --reason TEXT] [--id SUPPRESSION_ID] [--suppressions FILE]\ndsh-security list [--target PATH] [--output REPORTS_DIR]\ndsh-security check --report REPORT_JSON [--fail-on high|medium|none]\ndsh-security render --report REPORT_JSON --output NEW_HTML [--format html|sarif]\ndsh-security review --report REPORT_JSON --reviews REVIEWS_JSON [--output REPORTS_DIR]\ndsh-security hook --target PATH --action install|remove --event pre-commit|pre-push [--base REF] [--enforce]\nExit: 0 complete, 1 policy exceeded or evaluation regressed, 2 incomplete/unavailable/error. CLI runs rules only; DSH dsh-security-review performs model review. --dependencies sends package names and versions to OSV. --dynamic sends at most 12 read-only same-origin GET requests to a service you own. Exclusions live in ~/.dsh/security-scan/suppressions.json unless --suppressions is given.')
     return 0
   } finally { await toolchains.close(); process.removeListener('SIGINT', cancel); process.removeListener('SIGTERM', cancel) }
 }

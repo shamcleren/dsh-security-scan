@@ -12,6 +12,13 @@ import { parseUvLock } from './uv-lock.js'
 type Engine = Report['engines'][number]
 export const GITLEAKS_VERSION = '8.24.2'
 export const recommendation = (rule: string): string => {
+  if (/ssrf/u.test(rule)) return '服务端请求的目标只能来自固定域名或白名单；解析 URL 后校验协议和主机，禁止内网地址与跳转绕过。补充指向 127.0.0.1 和云元数据地址的拒绝用例。'
+  if (/redirect/u.test(rule)) return '跳转目标限制为站内相对路径或白名单映射，拒绝 //、\\ 和带协议的地址；补充外部地址被拒绝的测试。'
+  if (/path/u.test(rule)) return '将路径解析为绝对路径后确认仍在目标目录内，或只取文件名；补充 ../ 和绝对路径被拒绝的测试。'
+  if (/template/u.test(rule)) return '模板源码使用固定文件或常量，用户输入只作为模板变量传入；补充包含 {{ }} 表达式的回归测试。'
+  if (/jwt/u.test(rule)) return '使用密钥校验签名并固定允许的算法列表，禁止 none；补充篡改或未签名令牌被拒绝的测试。'
+  if (/debug/u.test(rule)) return '生产环境关闭调试模式，由环境变量显式开启并只监听本机地址；部署使用 WSGI 服务器。'
+  if (/cors/u.test(rule)) return '带凭据的 CORS 只允许明确列出的来源；补充未知 Origin 不返回允许头的测试。'
   if (/shell/u.test(rule)) return '避免将外部输入拼接为 shell 命令；使用固定可执行文件和参数数组，并约束可选参数。补充恶意参数回归测试。'
   if (/sql/u.test(rule)) return '使用参数化 SQL，将表名等无法绑定的标识符限制为明确允许的集合；验证跨租户访问。'
   if (/tls/u.test(rule)) return '启用证书和主机名验证，配置受信任证书链；为错误证书添加拒绝用例。'
