@@ -84,7 +84,7 @@ export declare const FindingSchema: z.ZodObject<{
         createdAt: z.ZodString;
     }, z.core.$strict>>;
 }, z.core.$strict>;
-export declare const PLUGIN_VERSION: "0.17.0";
+export declare const PLUGIN_VERSION: "0.17.1";
 export declare const ReportSchema: z.ZodObject<{
     schemaVersion: z.ZodLiteral<1>;
     pluginVersion: z.ZodString;

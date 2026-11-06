@@ -1,6 +1,6 @@
 {
   "name": "@shamcleren/dsh-security-scan",
-  "version": "0.17.0",
+  "version": "0.17.1",
   "description": "DSH plugin: local Python, Go and JavaScript/TypeScript security scanning with offline reports, an optional runtime baseline and evidence-based AI review",
   "keywords": [
     "dsh-plugin",
@@ -10,6 +10,8 @@
     "sast",
     "semgrep",
     "gitleaks",
+    "osv",
+    "sarif",
     "code-review"
   ],
   "homepage": "https://github.com/shamcleren/dsh-security-scan#readme",
@@ -50,11 +52,15 @@
     "agent-presets/**/*",
     "evaluation/**/*",
     "README.en.md",
+    "docs/*.md",
     "CONTRIBUTING.md",
     "SECURITY.md",
     "THIRD_PARTY_NOTICES.md"
   ],
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"

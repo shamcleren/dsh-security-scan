@@ -11,6 +11,8 @@
     "agent-presets/dsh-security-audit/agent.cordis.yml",
     "agent-presets/dsh-security-audit/preset.yml",
     "cordis.patch.yml",
+    "docs/guide.en.md",
+    "docs/guide.md",
     "evaluation/README.md",
     "evaluation/baseline.json",
     "evaluation/cases/go/go-gin-path-vulnerable.go",
