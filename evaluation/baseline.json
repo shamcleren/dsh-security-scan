@@ -1,0 +1,692 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-11-06T02:34:58.240Z",
+  "pluginVersion": "0.15.0",
+  "scanner": {
+    "name": "semgrep-ce",
+    "version": "1.176.1"
+  },
+  "corpusDigest": "01d156705982419877305120996822adf1016b5ee2ff7a70254c3bc516e3fc99",
+  "rulesDigest": "487a6a3e38d00feb1bfa4c9c659d762424c9ce8d422d37e3205f921bb5bb38f5",
+  "provenance": "Original manually labelled synthetic source fixtures. Fixtures are data only and must never be executed. Labels are relative to the stated CWE and assumptions, not a claim about a deployed application.",
+  "environment": {
+    "node": "v26.7.0",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "model": {
+    "enabled": false,
+    "requests": 0,
+    "tokens": 0
+  },
+  "timing": {
+    "runs": 3,
+    "milliseconds": [
+      2363,
+      1855,
+      1845
+    ],
+    "medianMs": 1855,
+    "minMs": 1845,
+    "maxMs": 2363
+  },
+  "summary": {
+    "cases": 42,
+    "tp": 16,
+    "fn": 4,
+    "fp": 6,
+    "tn": 16,
+    "precision": 0.7272727272727273,
+    "recall": 0.8,
+    "f1": 0.7619047619047619
+  },
+  "byLanguage": {
+    "go": {
+      "cases": 8,
+      "tp": 3,
+      "fn": 1,
+      "fp": 1,
+      "tn": 3,
+      "precision": 0.75,
+      "recall": 0.75,
+      "f1": 0.75
+    },
+    "javascript": {
+      "cases": 11,
+      "tp": 4,
+      "fn": 1,
+      "fp": 2,
+      "tn": 4,
+      "precision": 0.6666666666666666,
+      "recall": 0.8,
+      "f1": 0.7272727272727273
+    },
+    "python": {
+      "cases": 13,
+      "tp": 5,
+      "fn": 1,
+      "fp": 2,
+      "tn": 5,
+      "precision": 0.7142857142857143,
+      "recall": 0.8333333333333334,
+      "f1": 0.7692307692307693
+    },
+    "typescript": {
+      "cases": 10,
+      "tp": 4,
+      "fn": 1,
+      "fp": 1,
+      "tn": 4,
+      "precision": 0.8,
+      "recall": 0.8,
+      "f1": 0.8
+    }
+  },
+  "byCwe": {
+    "CWE-22": {
+      "cases": 1,
+      "tp": 0,
+      "fn": 1,
+      "fp": 0,
+      "tn": 0,
+      "precision": null,
+      "recall": 0,
+      "f1": 0
+    },
+    "CWE-295": {
+      "cases": 8,
+      "tp": 4,
+      "fn": 0,
+      "fp": 0,
+      "tn": 4,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1
+    },
+    "CWE-502": {
+      "cases": 4,
+      "tp": 2,
+      "fn": 0,
+      "fp": 0,
+      "tn": 2,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1
+    },
+    "CWE-78": {
+      "cases": 11,
+      "tp": 4,
+      "fn": 0,
+      "fp": 3,
+      "tn": 4,
+      "precision": 0.5714285714285714,
+      "recall": 1,
+      "f1": 0.7272727272727273
+    },
+    "CWE-79": {
+      "cases": 6,
+      "tp": 2,
+      "fn": 0,
+      "fp": 2,
+      "tn": 2,
+      "precision": 0.5,
+      "recall": 1,
+      "f1": 0.6666666666666666
+    },
+    "CWE-862": {
+      "cases": 1,
+      "tp": 0,
+      "fn": 1,
+      "fp": 0,
+      "tn": 0,
+      "precision": null,
+      "recall": 0,
+      "f1": 0
+    },
+    "CWE-89": {
+      "cases": 3,
+      "tp": 1,
+      "fn": 1,
+      "fp": 0,
+      "tn": 1,
+      "precision": 1,
+      "recall": 0.5,
+      "f1": 0.6666666666666666
+    },
+    "CWE-918": {
+      "cases": 1,
+      "tp": 0,
+      "fn": 1,
+      "fp": 0,
+      "tn": 0,
+      "precision": null,
+      "recall": 0,
+      "f1": 0
+    },
+    "CWE-95": {
+      "cases": 7,
+      "tp": 3,
+      "fn": 0,
+      "fp": 1,
+      "tn": 3,
+      "precision": 0.75,
+      "recall": 1,
+      "f1": 0.8571428571428571
+    }
+  },
+  "cases": [
+    {
+      "id": "python-shell-vulnerable",
+      "file": "python/python-shell-vulnerable.py",
+      "language": "python",
+      "cwe": "CWE-78",
+      "label": "vulnerable",
+      "rationale": "Untrusted input reaches the named sensitive operation without the required safeguard, or TLS verification is disabled.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.python-shell"
+      ]
+    },
+    {
+      "id": "python-shell-fixed",
+      "file": "python/python-shell-fixed.py",
+      "language": "python",
+      "cwe": "CWE-78",
+      "label": "safe",
+      "rationale": "The paired operation uses a safe API or retains the relevant safeguard for this CWE.",
+      "found": false,
+      "matchedCwe": false,
+      "rules": []
+    },
+    {
+      "id": "python-eval-vulnerable",
+      "file": "python/python-eval-vulnerable.py",
+      "language": "python",
+      "cwe": "CWE-95",
+      "label": "vulnerable",
+      "rationale": "Untrusted input reaches the named sensitive operation without the required safeguard, or TLS verification is disabled.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.python-eval"
+      ]
+    },
+    {
+      "id": "python-eval-fixed",
+      "file": "python/python-eval-fixed.py",
+      "language": "python",
+      "cwe": "CWE-95",
+      "label": "safe",
+      "rationale": "The paired operation uses a safe API or retains the relevant safeguard for this CWE.",
+      "found": false,
+      "matchedCwe": false,
+      "rules": []
+    },
+    {
+      "id": "python-pickle-vulnerable",
+      "file": "python/python-pickle-vulnerable.py",
+      "language": "python",
+      "cwe": "CWE-502",
+      "label": "vulnerable",
+      "rationale": "Untrusted input reaches the named sensitive operation without the required safeguard, or TLS verification is disabled.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.python-pickle"
+      ]
+    },
+    {
+      "id": "python-pickle-fixed",
+      "file": "python/python-pickle-fixed.py",
+      "language": "python",
+      "cwe": "CWE-502",
+      "label": "safe",
+      "rationale": "The paired operation uses a safe API or retains the relevant safeguard for this CWE.",
+      "found": false,
+      "matchedCwe": false,
+      "rules": []
+    },
+    {
+      "id": "python-tls-vulnerable",
+      "file": "python/python-tls-vulnerable.py",
+      "language": "python",
+      "cwe": "CWE-295",
+      "label": "vulnerable",
+      "rationale": "Untrusted input reaches the named sensitive operation without the required safeguard, or TLS verification is disabled.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.python-tls"
+      ]
+    },
+    {
+      "id": "python-tls-fixed",
+      "file": "python/python-tls-fixed.py",
+      "language": "python",
+      "cwe": "CWE-295",
+      "label": "safe",
+      "rationale": "The paired operation uses a safe API or retains the relevant safeguard for this CWE.",
+      "found": false,
+      "matchedCwe": false,
+      "rules": []
+    },
+    {
+      "id": "python-yaml-vulnerable",
+      "file": "python/python-yaml-vulnerable.py",
+      "language": "python",
+      "cwe": "CWE-502",
+      "label": "vulnerable",
+      "rationale": "Untrusted input reaches the named sensitive operation without the required safeguard, or TLS verification is disabled.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.python-yaml"
+      ]
+    },
+    {
+      "id": "python-yaml-fixed",
+      "file": "python/python-yaml-fixed.py",
+      "language": "python",
+      "cwe": "CWE-502",
+      "label": "safe",
+      "rationale": "The paired operation uses a safe API or retains the relevant safeguard for this CWE.",
+      "found": false,
+      "matchedCwe": false,
+      "rules": []
+    },
+    {
+      "id": "go-shell-vulnerable",
+      "file": "go/go-shell-vulnerable.go",
+      "language": "go",
+      "cwe": "CWE-78",
+      "label": "vulnerable",
+      "rationale": "Untrusted input reaches the named sensitive operation without the required safeguard, or TLS verification is disabled.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.go-shell"
+      ]
+    },
+    {
+      "id": "go-shell-fixed",
+      "file": "go/go-shell-fixed.go",
+      "language": "go",
+      "cwe": "CWE-78",
+      "label": "safe",
+      "rationale": "The paired operation uses a safe API or retains the relevant safeguard for this CWE.",
+      "found": false,
+      "matchedCwe": false,
+      "rules": []
+    },
+    {
+      "id": "go-tls-vulnerable",
+      "file": "go/go-tls-vulnerable.go",
+      "language": "go",
+      "cwe": "CWE-295",
+      "label": "vulnerable",
+      "rationale": "Untrusted input reaches the named sensitive operation without the required safeguard, or TLS verification is disabled.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.go-tls"
+      ]
+    },
+    {
+      "id": "go-tls-fixed",
+      "file": "go/go-tls-fixed.go",
+      "language": "go",
+      "cwe": "CWE-295",
+      "label": "safe",
+      "rationale": "The paired operation uses a safe API or retains the relevant safeguard for this CWE.",
+      "found": false,
+      "matchedCwe": false,
+      "rules": []
+    },
+    {
+      "id": "go-sql-vulnerable",
+      "file": "go/go-sql-vulnerable.go",
+      "language": "go",
+      "cwe": "CWE-89",
+      "label": "vulnerable",
+      "rationale": "Untrusted input reaches the named sensitive operation without the required safeguard, or TLS verification is disabled.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.go-sql"
+      ]
+    },
+    {
+      "id": "go-sql-fixed",
+      "file": "go/go-sql-fixed.go",
+      "language": "go",
+      "cwe": "CWE-89",
+      "label": "safe",
+      "rationale": "The paired operation uses a safe API or retains the relevant safeguard for this CWE.",
+      "found": false,
+      "matchedCwe": false,
+      "rules": []
+    },
+    {
+      "id": "js-eval-vulnerable",
+      "file": "javascript/js-eval-vulnerable.js",
+      "language": "javascript",
+      "cwe": "CWE-95",
+      "label": "vulnerable",
+      "rationale": "Untrusted input reaches the named sensitive operation without the required safeguard, or TLS verification is disabled.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.js-eval"
+      ]
+    },
+    {
+      "id": "js-eval-fixed",
+      "file": "javascript/js-eval-fixed.js",
+      "language": "javascript",
+      "cwe": "CWE-95",
+      "label": "safe",
+      "rationale": "The paired operation uses a safe API or retains the relevant safeguard for this CWE.",
+      "found": false,
+      "matchedCwe": false,
+      "rules": []
+    },
+    {
+      "id": "js-shell-vulnerable",
+      "file": "javascript/js-shell-vulnerable.js",
+      "language": "javascript",
+      "cwe": "CWE-78",
+      "label": "vulnerable",
+      "rationale": "Untrusted input reaches the named sensitive operation without the required safeguard, or TLS verification is disabled.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.js-shell"
+      ]
+    },
+    {
+      "id": "js-shell-fixed",
+      "file": "javascript/js-shell-fixed.js",
+      "language": "javascript",
+      "cwe": "CWE-78",
+      "label": "safe",
+      "rationale": "The paired operation uses a safe API or retains the relevant safeguard for this CWE.",
+      "found": false,
+      "matchedCwe": false,
+      "rules": []
+    },
+    {
+      "id": "js-tls-vulnerable",
+      "file": "javascript/js-tls-vulnerable.js",
+      "language": "javascript",
+      "cwe": "CWE-295",
+      "label": "vulnerable",
+      "rationale": "Untrusted input reaches the named sensitive operation without the required safeguard, or TLS verification is disabled.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.js-tls"
+      ]
+    },
+    {
+      "id": "js-tls-fixed",
+      "file": "javascript/js-tls-fixed.js",
+      "language": "javascript",
+      "cwe": "CWE-295",
+      "label": "safe",
+      "rationale": "The paired operation uses a safe API or retains the relevant safeguard for this CWE.",
+      "found": false,
+      "matchedCwe": false,
+      "rules": []
+    },
+    {
+      "id": "js-html-vulnerable",
+      "file": "javascript/js-html-vulnerable.js",
+      "language": "javascript",
+      "cwe": "CWE-79",
+      "label": "vulnerable",
+      "rationale": "Untrusted input reaches the named sensitive operation without the required safeguard, or TLS verification is disabled.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.js-html"
+      ]
+    },
+    {
+      "id": "js-html-fixed",
+      "file": "javascript/js-html-fixed.js",
+      "language": "javascript",
+      "cwe": "CWE-79",
+      "label": "safe",
+      "rationale": "The paired operation uses a safe API or retains the relevant safeguard for this CWE.",
+      "found": false,
+      "matchedCwe": false,
+      "rules": []
+    },
+    {
+      "id": "ts-eval-vulnerable",
+      "file": "typescript/ts-eval-vulnerable.ts",
+      "language": "typescript",
+      "cwe": "CWE-95",
+      "label": "vulnerable",
+      "rationale": "Untrusted input reaches the named sensitive operation without the required safeguard, or TLS verification is disabled.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.js-eval"
+      ]
+    },
+    {
+      "id": "ts-eval-fixed",
+      "file": "typescript/ts-eval-fixed.ts",
+      "language": "typescript",
+      "cwe": "CWE-95",
+      "label": "safe",
+      "rationale": "The paired operation uses a safe API or retains the relevant safeguard for this CWE.",
+      "found": false,
+      "matchedCwe": false,
+      "rules": []
+    },
+    {
+      "id": "ts-shell-vulnerable",
+      "file": "typescript/ts-shell-vulnerable.ts",
+      "language": "typescript",
+      "cwe": "CWE-78",
+      "label": "vulnerable",
+      "rationale": "Untrusted input reaches the named sensitive operation without the required safeguard, or TLS verification is disabled.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.js-shell"
+      ]
+    },
+    {
+      "id": "ts-shell-fixed",
+      "file": "typescript/ts-shell-fixed.ts",
+      "language": "typescript",
+      "cwe": "CWE-78",
+      "label": "safe",
+      "rationale": "The paired operation uses a safe API or retains the relevant safeguard for this CWE.",
+      "found": false,
+      "matchedCwe": false,
+      "rules": []
+    },
+    {
+      "id": "ts-tls-vulnerable",
+      "file": "typescript/ts-tls-vulnerable.ts",
+      "language": "typescript",
+      "cwe": "CWE-295",
+      "label": "vulnerable",
+      "rationale": "Untrusted input reaches the named sensitive operation without the required safeguard, or TLS verification is disabled.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.js-tls"
+      ]
+    },
+    {
+      "id": "ts-tls-fixed",
+      "file": "typescript/ts-tls-fixed.ts",
+      "language": "typescript",
+      "cwe": "CWE-295",
+      "label": "safe",
+      "rationale": "The paired operation uses a safe API or retains the relevant safeguard for this CWE.",
+      "found": false,
+      "matchedCwe": false,
+      "rules": []
+    },
+    {
+      "id": "ts-html-vulnerable",
+      "file": "typescript/ts-html-vulnerable.ts",
+      "language": "typescript",
+      "cwe": "CWE-79",
+      "label": "vulnerable",
+      "rationale": "Untrusted input reaches the named sensitive operation without the required safeguard, or TLS verification is disabled.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.js-html"
+      ]
+    },
+    {
+      "id": "ts-html-fixed",
+      "file": "typescript/ts-html-fixed.ts",
+      "language": "typescript",
+      "cwe": "CWE-79",
+      "label": "safe",
+      "rationale": "The paired operation uses a safe API or retains the relevant safeguard for this CWE.",
+      "found": false,
+      "matchedCwe": false,
+      "rules": []
+    },
+    {
+      "id": "python-trusted-eval",
+      "file": "python/python-trusted-eval.py",
+      "language": "python",
+      "cwe": "CWE-95",
+      "label": "safe",
+      "rationale": "Only a fixed source literal is evaluated; the rule still produces a candidate.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.python-eval"
+      ]
+    },
+    {
+      "id": "python-trusted-shell",
+      "file": "python/python-trusted-shell.py",
+      "language": "python",
+      "cwe": "CWE-78",
+      "label": "safe",
+      "rationale": "The command is a fixed trusted literal with no external interpolation.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.python-shell"
+      ]
+    },
+    {
+      "id": "go-trusted-shell",
+      "file": "go/go-trusted-shell.go",
+      "language": "go",
+      "cwe": "CWE-78",
+      "label": "safe",
+      "rationale": "The shell command is a fixed trusted literal.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.go-shell"
+      ]
+    },
+    {
+      "id": "js-trusted-shell",
+      "file": "javascript/js-trusted-shell.js",
+      "language": "javascript",
+      "cwe": "CWE-78",
+      "label": "safe",
+      "rationale": "The command is a fixed trusted literal.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.js-shell"
+      ]
+    },
+    {
+      "id": "js-trusted-html",
+      "file": "javascript/js-trusted-html.js",
+      "language": "javascript",
+      "cwe": "CWE-79",
+      "label": "safe",
+      "rationale": "The HTML is a fixed trusted literal without an external input.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.js-html"
+      ]
+    },
+    {
+      "id": "ts-sanitized-html",
+      "file": "typescript/ts-sanitized-html.ts",
+      "language": "typescript",
+      "cwe": "CWE-79",
+      "label": "safe",
+      "rationale": "The fixture assumes the standard trusted DOMPurify sanitizer and default safe configuration.",
+      "found": true,
+      "matchedCwe": true,
+      "rules": [
+        "dsh-security.js-html"
+      ]
+    },
+    {
+      "id": "python-missing-authorization",
+      "file": "python/python-missing-authorization.py",
+      "language": "python",
+      "cwe": "CWE-862",
+      "label": "vulnerable",
+      "rationale": "A registered public route exposes private account records by caller-selected ID without authentication or authorization; db is the application account store.",
+      "found": false,
+      "matchedCwe": false,
+      "rules": []
+    },
+    {
+      "id": "go-path-traversal",
+      "file": "go/go-path-traversal.go",
+      "language": "go",
+      "cwe": "CWE-22",
+      "label": "vulnerable",
+      "rationale": "The registered route joins untrusted path segments without a root-boundary check.",
+      "found": false,
+      "matchedCwe": false,
+      "rules": []
+    },
+    {
+      "id": "js-sql-injection",
+      "file": "javascript/js-sql-injection.js",
+      "language": "javascript",
+      "cwe": "CWE-89",
+      "label": "vulnerable",
+      "rationale": "A registered route concatenates untrusted query input into SQL without binding parameters.",
+      "found": false,
+      "matchedCwe": false,
+      "rules": []
+    },
+    {
+      "id": "ts-ssrf",
+      "file": "typescript/ts-ssrf.ts",
+      "language": "typescript",
+      "cwe": "CWE-918",
+      "label": "vulnerable",
+      "rationale": "The server fetches a caller-chosen URL without an allowed destination policy.",
+      "found": false,
+      "matchedCwe": false,
+      "rules": []
+    }
+  ],
+  "limitations": [
+    "Synthetic source fixtures; not a production vulnerability benchmark.",
+    "Metrics describe scanner candidates against labelled files, not confirmed exploitable vulnerabilities.",
+    "All vulnerable labels require a matching CWE; any candidate on a safe file counts as a false positive.",
+    "No application, fixture code, payload, model or dependency database query was executed. AI review quality is not measured."
+  ],
+  "regressions": []
+}
